@@ -453,7 +453,7 @@ resource "aws_cognito_user_pool_client" "main" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  
+
   callback_urls = [
     "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
   ]
@@ -591,7 +591,7 @@ resource "aws_ecs_task_definition" "main" {
     {
       name  = "chainlit-app"
       image = var.container_image
-      
+
       portMappings = [
         {
           containerPort = 8000
@@ -679,7 +679,7 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type = "authenticate-cognito"
+    type  = "authenticate-cognito"
     order = 1
 
     authenticate_cognito {
