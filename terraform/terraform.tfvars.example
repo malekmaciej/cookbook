@@ -1,0 +1,29 @@
+# AWS Configuration
+aws_region = "us-east-1"
+environment = "dev"
+project_name = "cookbook-chatbot"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Container Configuration
+# Update this with your actual ECR repository URI after building and pushing the image
+container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest"
+container_cpu = 1024
+container_memory = 2048
+desired_count = 2
+
+# Bedrock Configuration
+bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+knowledge_base_name = "cooking-recipes-kb"
+
+# Cognito Configuration
+# This must be globally unique across all AWS accounts
+cognito_domain_prefix = "cookbook-chatbot-<UNIQUE_SUFFIX>"
+
+# Optional: ACM certificate ARN for HTTPS
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Optional: Email domains allowed for signup
+# allowed_email_domains = ["example.com"]

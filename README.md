@@ -1,2 +1,321 @@
-# cookbook
-CookBook Chatbot
+# CookBook Chatbot 👨‍🍳
+
+An AI-powered cooking assistant chatbot for your recipe collection, built with AWS Bedrock, Knowledge Bases, and Chainlit.
+
+## Architecture
+
+This project implements a serverless, scalable chatbot solution with the following AWS services:
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌─────────────────┐
+│   Internet  │────▶│  ALB + WAF   │────▶│   Cognito   │────▶│   ECS Fargate   │
+│   Users     │     │  (Port 80)   │     │  (Auth)     │     │  (Chainlit App) │
+└─────────────┘     └──────────────┘     └─────────────┘     └────────┬────────┘
+                                                                        │
+                                                                        ▼
+                                                              ┌─────────────────┐
+                                                              │  AWS Bedrock    │
+                                                              │  - Claude Model │
+                                                              │  - Knowledge    │
+                                                              │    Base         │
+                                                              └────────┬────────┘
+                                                                       │
+                                                    ┌──────────────────┴──────────────┐
+                                                    ▼                                 ▼
+                                              ┌──────────┐                    ┌──────────────┐
+                                              │    S3    │                    │  OpenSearch  │
+                                              │ (Recipes)│                    │  Serverless  │
+                                              └──────────┘                    │  (Vectors)   │
+                                                                              └──────────────┘
+```
+
+### Components
+
+- **Application Load Balancer (ALB)**: Entry point for HTTPS traffic with SSL termination
+- **AWS Cognito**: User authentication and authorization with AWS SSO integration
+- **ECS Fargate**: Serverless container hosting for the Chainlit frontend
+- **AWS Bedrock**: AI model (Claude 3) for natural language processing
+- **Bedrock Knowledge Base**: RAG (Retrieval-Augmented Generation) system for recipe queries
+- **Amazon S3**: Storage for recipe documents
+- **OpenSearch Serverless**: Vector database for semantic search
+- **VPC**: Isolated network with public and private subnets
+
+## Prerequisites
+
+- AWS Account with appropriate permissions
+- AWS CLI configured with credentials
+- Terraform >= 1.5
+- Docker installed locally
+- Python 3.11+
+
+## Quick Start
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/malekmaciej/cookbook.git
+cd cookbook
+```
+
+### 2. Prepare Your Recipe Documents
+
+Place your recipe documents (PDF, TXT, MD, etc.) in a local folder. These will be uploaded to S3 after infrastructure deployment.
+
+### 3. Configure Terraform Variables
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` and update:
+- `cognito_domain_prefix`: Must be globally unique (e.g., `cookbook-chatbot-yourname-12345`)
+- `container_image`: Will be updated after building and pushing the Docker image
+- Other variables as needed for your environment
+
+### 4. Build and Push Docker Image
+
+First, create an ECR repository:
+
+```bash
+aws ecr create-repository --repository-name cookbook-chatbot --region us-east-1
+```
+
+Build and push the Docker image:
+
+```bash
+cd ../app
+
+# Get your AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+
+# Build the image
+docker build -t cookbook-chatbot:latest .
+
+# Tag the image
+docker tag cookbook-chatbot:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest
+
+# Push the image
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest
+```
+
+Update `terraform.tfvars` with the ECR image URI:
+```hcl
+container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest"
+```
+
+### 5. Deploy Infrastructure
+
+```bash
+cd ../terraform
+
+# Initialize Terraform
+terraform init
+
+# Review the plan
+terraform plan
+
+# Apply the configuration
+terraform apply
+```
+
+The deployment takes approximately 10-15 minutes.
+
+### 6. Upload Recipe Documents
+
+After deployment, upload your recipe documents to the S3 bucket:
+
+```bash
+# Get the bucket name from Terraform output
+BUCKET_NAME=$(terraform output -raw s3_bucket_name)
+
+# Upload recipes
+aws s3 cp /path/to/your/recipes/ s3://${BUCKET_NAME}/ --recursive
+```
+
+### 7. Sync Knowledge Base
+
+After uploading documents, trigger a sync of the Knowledge Base:
+
+```bash
+# Get the Knowledge Base ID and Data Source ID
+KB_ID=$(terraform output -raw knowledge_base_id)
+
+# Get the data source ID
+DATA_SOURCE_ID=$(aws bedrock-agent list-data-sources \
+  --knowledge-base-id ${KB_ID} \
+  --query 'dataSourceSummaries[0].dataSourceId' \
+  --output text)
+
+# Start ingestion job
+aws bedrock-agent start-ingestion-job \
+  --knowledge-base-id ${KB_ID} \
+  --data-source-id ${DATA_SOURCE_ID}
+```
+
+### 8. Access the Application
+
+Get the ALB DNS name:
+
+```bash
+terraform output alb_dns_name
+```
+
+Open the URL in your browser. You'll be prompted to:
+1. Create a Cognito user account
+2. Verify your email
+3. Login to access the chatbot
+
+## Configuration
+
+### Environment Variables
+
+The Chainlit application uses the following environment variables (automatically configured by Terraform):
+
+- `KNOWLEDGE_BASE_ID`: Bedrock Knowledge Base ID
+- `AWS_REGION`: AWS region
+- `BEDROCK_MODEL_ID`: Bedrock model to use
+
+### Terraform Variables
+
+See `terraform/variables.tf` for all configurable options:
+
+- **aws_region**: AWS region (default: us-east-1)
+- **environment**: Environment name (dev/staging/prod)
+- **container_cpu**: CPU units for ECS task (default: 1024)
+- **container_memory**: Memory in MB for ECS task (default: 2048)
+- **desired_count**: Number of ECS tasks (default: 2)
+- **bedrock_model_id**: Bedrock model ID
+
+## Cost Estimation
+
+Approximate monthly costs (us-east-1):
+
+- **ECS Fargate**: ~$30-50 (2 tasks, 1 vCPU, 2GB RAM)
+- **Application Load Balancer**: ~$20-25
+- **NAT Gateway**: ~$30-40 (per AZ)
+- **OpenSearch Serverless**: ~$50-100 (based on usage)
+- **Bedrock**: Pay per request (varies with usage)
+- **S3**: ~$1-5 (based on storage)
+
+**Total**: ~$130-220/month base cost + Bedrock usage
+
+## Security Features
+
+- ✅ VPC with public/private subnet isolation
+- ✅ ECS tasks run in private subnets
+- ✅ AWS Cognito authentication required
+- ✅ ALB security groups restrict traffic
+- ✅ S3 bucket encryption enabled
+- ✅ IAM roles with least privilege
+- ✅ CloudWatch logging enabled
+
+## Maintenance
+
+### Updating the Application
+
+1. Make changes to `app/app.py`
+2. Rebuild and push the Docker image
+3. Update ECS service:
+
+```bash
+aws ecs update-service \
+  --cluster cookbook-chatbot-cluster \
+  --service cookbook-chatbot-service \
+  --force-new-deployment
+```
+
+### Adding More Recipes
+
+Simply upload new documents to S3 and trigger a Knowledge Base sync:
+
+```bash
+aws s3 cp new-recipe.pdf s3://${BUCKET_NAME}/
+aws bedrock-agent start-ingestion-job \
+  --knowledge-base-id ${KB_ID} \
+  --data-source-id ${DATA_SOURCE_ID}
+```
+
+### Monitoring
+
+- **ECS Logs**: Check CloudWatch Logs at `/ecs/cookbook-chatbot`
+- **ALB Metrics**: Monitor in CloudWatch under Application Load Balancer
+- **Bedrock Usage**: Check AWS Cost Explorer
+
+## Cleanup
+
+To destroy all resources:
+
+```bash
+cd terraform
+terraform destroy
+```
+
+**Note**: Manually delete the ECR repository if no longer needed:
+
+```bash
+aws ecr delete-repository --repository-name cookbook-chatbot --force
+```
+
+## Troubleshooting
+
+### Issue: Can't access the application
+
+- Verify ALB is healthy: Check target group health in AWS Console
+- Check security groups allow traffic on port 80
+- Verify Cognito user is confirmed
+
+### Issue: Chatbot returns errors
+
+- Check ECS logs in CloudWatch
+- Verify Knowledge Base has completed ingestion
+- Ensure IAM roles have proper Bedrock permissions
+
+### Issue: Terraform apply fails
+
+- Verify AWS credentials are configured
+- Check you have necessary IAM permissions
+- Ensure `cognito_domain_prefix` is globally unique
+
+## Development
+
+### Local Testing
+
+Run the Chainlit app locally (requires AWS credentials):
+
+```bash
+cd app
+pip install -r requirements.txt
+
+# Set environment variables
+export KNOWLEDGE_BASE_ID="your-kb-id"
+export AWS_REGION="us-east-1"
+export BEDROCK_MODEL_ID="anthropic.claude-3-sonnet-20240229-v1:0"
+
+# Run the app
+chainlit run app.py
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+See [LICENSE](LICENSE) file for details.
+
+## Support
+
+For issues and questions:
+- Open an issue in this repository
+- Check AWS Bedrock documentation
+- Review Chainlit documentation
+
+## Acknowledgments
+
+- Built with [Chainlit](https://chainlit.io/)
+- Powered by [AWS Bedrock](https://aws.amazon.com/bedrock/)
+- Infrastructure as Code with [Terraform](https://www.terraform.io/)
