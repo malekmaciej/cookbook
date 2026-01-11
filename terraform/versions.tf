@@ -7,6 +7,12 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  backend "s3" {
+    bucket = "068167017169-terraform-state"
+    key    = "cookbook/terraform.tfstate"
+    region = "eu-west-1"
+  }
 }
 
 provider "aws" {

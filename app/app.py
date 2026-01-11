@@ -13,9 +13,7 @@ bedrock_runtime = boto3.client(
 )
 
 KNOWLEDGE_BASE_ID = os.environ.get("KNOWLEDGE_BASE_ID")
-MODEL_ID = os.environ.get(
-    "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
-)
+MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 
 
 @cl.on_chat_start
