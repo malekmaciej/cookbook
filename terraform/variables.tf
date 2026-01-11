@@ -69,14 +69,26 @@ variable "cognito_domain_prefix" {
   type        = string
 }
 
-variable "certificate_arn" {
-  description = "ARN of ACM certificate for ALB HTTPS listener (optional)"
+variable "domain_name" {
+  description = "Domain name for the application (e.g., cookbook.maciejmalek.com)"
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for the domain"
   type        = string
   default     = ""
 }
 
 variable "allowed_email_domains" {
   description = "List of allowed email domains for Cognito signup"
+  type        = list(string)
+  default     = []
+}
+
+variable "additional_aoss_principals" {
+  description = "Additional IAM principal ARNs to grant access to OpenSearch Serverless collection"
   type        = list(string)
   default     = []
 }

@@ -267,46 +267,29 @@ resource "aws_iam_role_policy" "bedrock_kb_model" {
   })
 }
 
-# Bedrock Knowledge Base
-resource "aws_bedrockagent_knowledge_base" "main" {
-  name     = var.knowledge_base_name
-  role_arn = aws_iam_role.bedrock_kb.arn
+resource "aws_iam_role_policy" "bedrock_kb_aoss" {
+  name = "${var.project_name}-bedrock-kb-aoss-policy"
+  role = aws_iam_role.bedrock_kb.id
 
-  knowledge_base_configuration {
-    vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v1"
-    }
-    type = "VECTOR"
-  }
-
-  storage_configuration {
-    type = "OPENSEARCH_SERVERLESS"
-    opensearch_serverless_configuration {
-      collection_arn    = aws_opensearchserverless_collection.main.arn
-      vector_index_name = "bedrock-knowledge-base-index"
-      field_mapping {
-        vector_field   = "bedrock-knowledge-base-default-vector"
-        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
-        metadata_field = "AMAZON_BEDROCK_METADATA"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "aoss:APIAccessAll"
+        ]
+        Resource = aws_opensearchserverless_collection.main.arn
       }
-    }
-  }
+    ]
+  })
 
-  tags = {
-    Name = var.knowledge_base_name
-  }
+  depends_on = [
+    aws_opensearchserverless_collection.main
+  ]
 }
 
-# OpenSearch Serverless Collection for Vector Storage
-resource "aws_opensearchserverless_collection" "main" {
-  name = "${var.project_name}-vectors"
-  type = "VECTORSEARCH"
-
-  tags = {
-    Name = "${var.project_name}-vectors"
-  }
-}
-
+# OpenSearch Serverless Security Policies (must be created first)
 resource "aws_opensearchserverless_security_policy" "encryption" {
   name = "${var.project_name}-encryption-policy"
   type = "encryption"
@@ -339,6 +322,21 @@ resource "aws_opensearchserverless_security_policy" "network" {
       AllowFromPublic = true
     }
   ])
+}
+
+# OpenSearch Serverless Collection for Vector Storage
+resource "aws_opensearchserverless_collection" "main" {
+  name = "${var.project_name}-vectors"
+  type = "VECTORSEARCH"
+
+  depends_on = [
+    aws_opensearchserverless_security_policy.encryption,
+    aws_opensearchserverless_security_policy.network
+  ]
+
+  tags = {
+    Name = "${var.project_name}-vectors"
+  }
 }
 
 resource "aws_opensearchserverless_access_policy" "main" {
@@ -374,13 +372,142 @@ resource "aws_opensearchserverless_access_policy" "main" {
           ResourceType = "index"
         }
       ]
-      Principal = [
+      Principal = concat([
         aws_iam_role.bedrock_kb.arn,
         aws_iam_role.ecs_task_execution.arn,
-        aws_iam_role.ecs_task.arn
-      ]
+        aws_iam_role.ecs_task.arn,
+        data.aws_caller_identity.current.arn
+      ], var.additional_aoss_principals)
     }
   ])
+
+  depends_on = [
+    aws_opensearchserverless_collection.main
+  ]
+}
+
+# Create the vector index in OpenSearch Serverless
+# resource "null_resource" "create_index" {
+#   triggers = {
+#     collection_endpoint = aws_opensearchserverless_collection.main.collection_endpoint
+#   }
+
+#   provisioner "local-exec" {
+#     command = <<-EOT
+#       python3 << 'PYTHON_EOF'
+# import boto3
+# import json
+# import time
+# from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+
+# # Wait for collection to be ready
+# time.sleep(30)
+
+# # Get AWS credentials
+# session = boto3.Session()
+# credentials = session.get_credentials()
+# auth = AWSV4SignerAuth(credentials, '${var.aws_region}', 'aoss')
+# # auth = AWSV4SignerAuth(credentials, 'us-east-1', 'aoss')
+
+# # Parse endpoint (remove https://)
+# # endpoint = 'https://mb6jexmg9xix2boo3av4.us-east-1.aoss.amazonaws.com'.replace('https://', '')
+# endpoint = '${aws_opensearchserverless_collection.main.collection_endpoint}'.replace('https://', '')
+
+# # Create OpenSearch client
+# client = OpenSearch(
+#     hosts=[{'host': endpoint, 'port': 443}],
+#     http_auth=auth,
+#     use_ssl=True,
+#     verify_certs=True,
+#     connection_class=RequestsHttpConnection,
+#     timeout=30
+# )
+
+# # Create index
+# index_name = 'bedrock-knowledge-base-index'
+# index_body = {
+#     'settings': {
+#         'index': {
+#             'knn': True
+#         }
+#     },
+#     'mappings': {
+#         'properties': {
+#             'bedrock-knowledge-base-default-vector': {
+#                 'type': 'knn_vector',
+#                 'dimension': 1536,
+#                 'method': {
+#                     'engine': 'faiss',
+#                     'space_type': 'l2',
+#                     'name': 'hnsw'
+#                 }
+#             },
+#             'AMAZON_BEDROCK_TEXT_CHUNK': {
+#                 'type': 'text'
+#             },
+#             'AMAZON_BEDROCK_METADATA': {
+#                 'type': 'text',
+#                 'index': False
+#             }
+#         }
+#     }
+# }
+
+# try:
+#     if not client.indices.exists(index=index_name):
+#         response = client.indices.create(index=index_name, body=index_body)
+#         print(f"Index created: {response}")
+#     else:
+#         print(f"Index {index_name} already exists")
+# except Exception as e:
+#     print(f"Error creating index: {e}")
+#     raise
+
+# PYTHON_EOF
+#     EOT
+#   }
+
+#   depends_on = [
+#     aws_opensearchserverless_collection.main,
+#     aws_opensearchserverless_access_policy.main
+#   ]
+# }
+
+# Bedrock Knowledge Base
+resource "aws_bedrockagent_knowledge_base" "main" {
+  name     = var.knowledge_base_name
+  role_arn = aws_iam_role.bedrock_kb.arn
+
+  knowledge_base_configuration {
+    vector_knowledge_base_configuration {
+      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v1"
+    }
+    type = "VECTOR"
+  }
+
+  storage_configuration {
+    type = "OPENSEARCH_SERVERLESS"
+    opensearch_serverless_configuration {
+      collection_arn    = aws_opensearchserverless_collection.main.arn
+      vector_index_name = "bedrock-knowledge-base-index"
+      field_mapping {
+        vector_field   = "bedrock-knowledge-base-default-vector"
+        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
+        metadata_field = "AMAZON_BEDROCK_METADATA"
+      }
+    }
+  }
+
+  depends_on = [
+    aws_opensearchserverless_collection.main,
+    aws_opensearchserverless_access_policy.main,
+    aws_iam_role_policy.bedrock_kb_model,
+    aws_iam_role_policy.bedrock_kb_aoss,
+  ]
+
+  tags = {
+    Name = var.knowledge_base_name
+  }
 }
 
 # Bedrock Knowledge Base Data Source
@@ -455,7 +582,7 @@ resource "aws_cognito_user_pool_client" "main" {
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
 
   callback_urls = [
-    "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
+    var.domain_name != "" ? "https://${var.domain_name}/oauth2/idpresponse" : "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
   ]
 
   supported_identity_providers = ["COGNITO"]
@@ -586,6 +713,10 @@ resource "aws_ecs_task_definition" "main" {
   memory                   = var.container_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
 
   container_definitions = jsonencode([
     {
@@ -673,10 +804,83 @@ resource "aws_lb_target_group" "main" {
   }
 }
 
+# ACM Certificate for HTTPS
+resource "aws_acm_certificate" "main" {
+  count             = var.domain_name != "" ? 1 : 0
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-certificate"
+  }
+}
+
+# Route53 DNS validation record
+resource "aws_route53_record" "cert_validation" {
+  for_each = var.domain_name != "" ? {
+    for dvo in aws_acm_certificate.main[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = var.route53_zone_id
+}
+
+# Certificate validation
+resource "aws_acm_certificate_validation" "main" {
+  count                   = var.domain_name != "" ? 1 : 0
+  certificate_arn         = aws_acm_certificate.main[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# Route53 A record pointing to ALB
+resource "aws_route53_record" "alb" {
+  count   = var.domain_name != "" ? 1 : 0
+  zone_id = var.route53_zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  count             = var.domain_name != "" ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.main[0].arn
 
   default_action {
     type  = "authenticate-cognito"
@@ -694,6 +898,8 @@ resource "aws_lb_listener" "http" {
     order            = 2
     target_group_arn = aws_lb_target_group.main.arn
   }
+
+  depends_on = [aws_acm_certificate_validation.main]
 }
 
 # ECS Service
@@ -716,7 +922,10 @@ resource "aws_ecs_service" "main" {
     container_port   = 8000
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [
+    aws_lb_listener.http,
+    aws_lb_listener.https
+  ]
 
   tags = {
     Name = "${var.project_name}-service"

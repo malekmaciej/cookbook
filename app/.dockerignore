@@ -12,7 +12,6 @@ build
 .gitignore
 .dockerignore
 README.md
-*.md
 .env
 .venv
 venv/

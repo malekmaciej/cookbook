@@ -31,7 +31,7 @@ latex = false
 auto_tag_thread = true
 
 # Authorize users to spontaneously upload files with messages
-spontaneous_file_upload = true
+spontaneous_file_upload = {enabled = true, accept = ["*/*"], max_size_mb = 10, max_files = 5}
 
 [UI]
 # Name of the app and chatbot.

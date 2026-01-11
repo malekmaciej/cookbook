@@ -48,6 +48,7 @@ aws ecr create-repository \
   --image-scanning-configuration scanOnPush=true
 
 # Note the repositoryUri from the output
+# 068167017169.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot
 ```
 
 ### Step 4: Build and Push Docker Image
@@ -196,13 +197,20 @@ EOF
 
 ```bash
 # Get bucket name from Terraform output
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_DEFAULT_PROFILE=bedrock
 BUCKET_NAME=$(terraform output -raw s3_bucket_name)
+BUCKET_NAME=cookbook-recipes-068167017169
 
 # Upload sample recipes
-aws s3 cp ../sample-recipes/ s3://${BUCKET_NAME}/ --recursive
+cd ~/GitRepos/przepisy
+for file in $(ls *.md)   
+do
+aws --profile bedrock s3 cp ${file} s3://${BUCKET_NAME}/${file}
+done
 
 # Verify upload
-aws s3 ls s3://${BUCKET_NAME}/
+aws --profile bedrock s3 ls s3://${BUCKET_NAME}/
 ```
 
 ### Step 10: Sync Knowledge Base
@@ -210,22 +218,21 @@ aws s3 ls s3://${BUCKET_NAME}/
 ```bash
 # Get Knowledge Base ID
 KB_ID=$(terraform output -raw knowledge_base_id)
+KB_ID=XK7TH8KBIF
 
 # List data sources
-DATA_SOURCE_ID=$(aws bedrock-agent list-data-sources \
+DATA_SOURCE_ID=$(aws --profile bedrock bedrock-agent list-data-sources \
   --knowledge-base-id ${KB_ID} \
   --query 'dataSourceSummaries[0].dataSourceId' \
   --output text)
 
 # Start ingestion job
-aws bedrock-agent start-ingestion-job \
+aws --profile bedrock bedrock-agent start-ingestion-job \
   --knowledge-base-id ${KB_ID} \
   --data-source-id ${DATA_SOURCE_ID}
 
 # Check ingestion status (wait until COMPLETE)
-aws bedrock-agent list-ingestion-jobs \
-  --knowledge-base-id ${KB_ID} \
-  --data-source-id ${DATA_SOURCE_ID}
+aws --profile bedrock bedrock-agent list-ingestion-jobs --knowledge-base-id XK7TH8KBIF --data-source-id 6L0ICMK6TX
 ```
 
 The ingestion usually takes 2-5 minutes depending on the amount of data.
