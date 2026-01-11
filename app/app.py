@@ -40,6 +40,30 @@ async def main(message: cl.Message):
     await msg.send()
 
     try:
+        # System prompt with formatting instructions
+        system_prompt = """You are a helpful cooking assistant. When providing recipes, always format them in a clear, well-structured Markdown format with the following sections:
+
+# Recipe Name
+
+## Opis
+Brief description of the dish
+
+**Porcje:** [number of servings]
+**Czas przygotowania:** [preparation time]
+**Temperatura pieczenia:** [temperature if applicable]
+
+## Składniki
+- List all ingredients with measurements
+- Group by category if applicable (e.g., "Ciasto", "Nadzienie")
+
+## Sposób przygotowania
+1. Step-by-step instructions
+2. Each step on a new numbered line
+3. Clear and concise directions
+
+Include any tips, variations, or notes at the end if relevant.
+Always provide the COMPLETE recipe with ALL ingredients and ALL steps, never summarize or skip parts."""
+
         # Query the Knowledge Base using Retrieve and Generate
         response = bedrock_agent_runtime.retrieve_and_generate(
             input={"text": user_message},
@@ -50,6 +74,11 @@ async def main(message: cl.Message):
                     "modelArn": MODEL_ID,
                     "retrievalConfiguration": {
                         "vectorSearchConfiguration": {"numberOfResults": 5}
+                    },
+                    "generationConfiguration": {
+                        "promptTemplate": {
+                            "textPromptTemplate": f"{system_prompt}\n\nUser question: $query$\n\nSearch results: $search_results$\n\nProvide a complete, well-formatted response:"
+                        }
                     },
                 },
             },

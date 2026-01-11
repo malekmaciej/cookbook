@@ -227,9 +227,7 @@ DATA_SOURCE_ID=$(aws --profile bedrock bedrock-agent list-data-sources \
   --output text)
 
 # Start ingestion job
-aws --profile bedrock bedrock-agent start-ingestion-job \
-  --knowledge-base-id ${KB_ID} \
-  --data-source-id ${DATA_SOURCE_ID}
+aws --profile bedrock bedrock-agent start-ingestion-job --knowledge-base-id XK7TH8KBIF --data-source-id 6L0ICMK6TX
 
 # Check ingestion status (wait until COMPLETE)
 aws --profile bedrock bedrock-agent list-ingestion-jobs --knowledge-base-id XK7TH8KBIF --data-source-id 6L0ICMK6TX
