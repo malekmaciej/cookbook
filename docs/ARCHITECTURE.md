@@ -194,23 +194,24 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - Supported formats: PDF, TXT, MD, DOCX, HTML
 
 **Vector Store**:
-- Backend: Amazon S3
-- Storage: Vectors stored in S3 managed by Bedrock
-- Index: Managed automatically by Bedrock
+- Backend: Amazon S3 Vectors
+- Storage: Dedicated S3 Vector Bucket optimized for vector embeddings
+- Index: S3 Vectors Index with 1024 dimensions
+- Managed by: AWS Bedrock with S3 Vectors service
 
 **Ingestion Process**:
-1. Documents uploaded to S3
+1. Documents uploaded to S3 recipes bucket
 2. Ingestion job triggered
 3. Documents parsed and chunked
 4. Chunks embedded using Titan v2
-5. Vectors stored in S3 (managed by Bedrock)
+5. Vectors stored in S3 Vectors bucket with index
 6. Metadata indexed for retrieval
 
 **Query Process**:
 1. User query received
 2. Query embedded using Titan v2
-3. Semantic search in S3 vector store
-4. Top-K documents retrieved
+3. Semantic search in S3 Vectors index
+4. Top-K documents retrieved from vector bucket
 5. Retrieved context + query sent to Claude
 6. Generated response with citations
 
@@ -226,9 +227,27 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 
 **Supported Content**:
 - Recipe documents (PDF, TXT, MD, DOCX)
-- Vector embeddings (managed by Bedrock)
 - Images (optional, for future use)
 - Metadata files
+
+### 8. Amazon S3 Vectors
+
+**Purpose**: Vector storage and semantic search
+
+**Vector Bucket**:
+- Dedicated S3 Vector Bucket for embeddings
+- Optimized for high-dimensional vector data
+- Cost-effective alternative to traditional vector databases
+
+**Vector Index**:
+- Name: bedrock-knowledge-base-index
+- Dimensions: 1024 (for Titan v2)
+- Enables fast similarity search on embeddings
+
+**Access Control**:
+- Bucket policy for Bedrock service access
+- IAM policies for read/write operations
+- Scoped to specific AWS account
 
 ### 9. CloudWatch
 
@@ -251,7 +270,8 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 **Bedrock Knowledge Base Role**:
 - Trust: bedrock.amazonaws.com
 - Permissions:
-  - s3:GetObject, s3:ListBucket (recipe bucket)
+  - s3:GetObject, s3:PutObject, s3:DeleteObject, s3:ListBucket (recipe bucket)
+  - s3vectors:GetVectorIndex, s3vectors:QueryVectorIndex, s3vectors:PutVectorIndex, s3vectors:DeleteVectorIndex (vector bucket)
   - bedrock:InvokeModel (for embeddings)
 
 **ECS Task Execution Role**:
@@ -295,8 +315,8 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
    - API: retrieve_and_generate
    - Parameters: user query, KB ID, model ARN
 3. Bedrock → Knowledge Base: Retrieve relevant docs
-4. Knowledge Base → S3: Vector search
-5. S3 → Knowledge Base: Return top-K results
+4. Knowledge Base → S3 Vectors: Vector search in index
+5. S3 Vectors → Knowledge Base: Return top-K results
 6. Knowledge Base → Bedrock: Return documents + metadata
 7. Bedrock → Claude: Generate response with context
 8. Claude → Bedrock: Generated response
@@ -307,14 +327,14 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 ### Document Ingestion Flow
 
 ```
-1. Admin → S3: Upload recipe document
+1. Admin → S3 Recipes Bucket: Upload recipe document
 2. Admin → Bedrock Agent: Start ingestion job
 3. Bedrock Agent → S3: Fetch document
 4. Bedrock Agent → Parse and chunk document
 5. Bedrock Agent → Titan v2: Generate embeddings
 6. Titan → Bedrock Agent: Return vectors
-7. Bedrock Agent → S3: Store vectors + metadata
-8. S3 → Bedrock Agent: Confirm storage
+7. Bedrock Agent → S3 Vectors Bucket: Store vectors in index
+8. S3 Vectors → Bedrock Agent: Confirm storage
 9. Bedrock Agent → Admin: Ingestion complete
 ```
 

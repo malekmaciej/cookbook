@@ -134,8 +134,9 @@ terraform apply
 - ECS Cluster and Service (Fargate)
 - Application Load Balancer
 - Cognito User Pool
-- S3 Bucket for recipes and vector storage
-- Bedrock Knowledge Base (with S3 vector store)
+- S3 Bucket for recipe documents
+- S3 Vectors bucket and index for embeddings
+- Bedrock Knowledge Base (with S3 Vectors storage)
 - IAM Roles and Policies
 - CloudWatch Log Groups
 

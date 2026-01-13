@@ -35,7 +35,8 @@ This project implements a serverless, scalable chatbot solution with the followi
 - **ECS Fargate**: Serverless container hosting for the Chainlit frontend
 - **AWS Bedrock**: AI model (Claude 3) for natural language processing
 - **Bedrock Knowledge Base**: RAG (Retrieval-Augmented Generation) system for recipe queries
-- **Amazon S3**: Storage for recipe documents and vector embeddings
+- **Amazon S3**: Storage for recipe documents
+- **Amazon S3 Vectors**: Vector storage and semantic search for embeddings
 - **VPC**: Isolated network with public and private subnets
 
 ## Prerequisites

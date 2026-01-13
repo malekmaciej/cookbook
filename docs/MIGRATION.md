@@ -1,18 +1,18 @@
 # Migration Guide: OpenSearch Serverless to S3 Vectors
 
-This guide helps you migrate from the old architecture (using OpenSearch Serverless) to the new architecture (using S3 for vector storage).
+This guide helps you migrate from the old architecture (using OpenSearch Serverless) to the new architecture (using AWS S3 Vectors for vector storage).
 
 ## What Changed
 
 ### Infrastructure Changes
-- **Vector Storage**: Migrated from OpenSearch Serverless to S3 (managed by Bedrock)
+- **Vector Storage**: Migrated from OpenSearch Serverless to AWS S3 Vectors (dedicated vector bucket and index)
 - **Embedding Model**: Upgraded from Titan Embeddings v1 to v2
 - **Cost Savings**: Approximately $50-100/month by removing OpenSearch Serverless
 
 ### Benefits
-- ✅ **Lower costs** - No OpenSearch Serverless charges
+- ✅ **Lower costs** - No OpenSearch Serverless charges (~90% reduction vs traditional vector DBs)
 - ✅ **Better Polish language support** - Titan v2 has improved multilingual capabilities
-- ✅ **Simpler architecture** - Fewer resources to manage
+- ✅ **Simpler architecture** - Purpose-built S3 Vectors service
 - ✅ **Same functionality** - Transparent to the application
 
 ## Migration Steps

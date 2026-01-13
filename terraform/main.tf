@@ -205,6 +205,63 @@ resource "aws_s3_bucket_public_access_block" "recipes" {
   restrict_public_buckets = true
 }
 
+# S3 Vectors - Vector Bucket for storing embeddings
+resource "aws_s3vectors_vector_bucket" "vectors" {
+  vector_bucket_name = "${var.project_name}-vectors-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Name = "${var.project_name}-vectors"
+  }
+}
+
+# S3 Vectors - Vector Index for semantic search
+resource "aws_s3vectors_index" "main" {
+  vector_bucket_arn = aws_s3vectors_vector_bucket.vectors.arn
+  index_name        = "bedrock-knowledge-base-index"
+
+  # Vector dimensions for Titan Embeddings v2 (1024 when used with Bedrock KB)
+  dimension = 1024
+
+  tags = {
+    Name = "${var.project_name}-vector-index"
+  }
+}
+
+# S3 Vectors - Bucket Policy for Bedrock access
+resource "aws_s3vectors_vector_bucket_policy" "bedrock_access" {
+  vector_bucket_name = aws_s3vectors_vector_bucket.vectors.vector_bucket_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "BedrockKnowledgeBaseAccess"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock.amazonaws.com"
+        }
+        Action = [
+          "s3vectors:GetVectorIndex",
+          "s3vectors:QueryVectorIndex",
+          "s3vectors:PutVectorIndex",
+          "s3vectors:DeleteVectorIndex"
+        ]
+        Resource = [
+          aws_s3vectors_vector_bucket.vectors.arn,
+          "${aws_s3vectors_vector_bucket.vectors.arn}/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_s3vectors_vector_bucket.vectors]
+}
+
 # IAM Role for Bedrock Knowledge Base
 resource "aws_iam_role" "bedrock_kb" {
   name = "${var.project_name}-bedrock-kb-role"
@@ -251,6 +308,31 @@ resource "aws_iam_role_policy" "bedrock_kb_s3" {
   })
 }
 
+resource "aws_iam_role_policy" "bedrock_kb_s3vectors" {
+  name = "${var.project_name}-bedrock-kb-s3vectors-policy"
+  role = aws_iam_role.bedrock_kb.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:GetVectorIndex",
+          "s3vectors:QueryVectorIndex",
+          "s3vectors:PutVectorIndex",
+          "s3vectors:DeleteVectorIndex",
+          "s3vectors:ListVectorIndexes"
+        ]
+        Resource = [
+          aws_s3vectors_vector_bucket.vectors.arn,
+          "${aws_s3vectors_vector_bucket.vectors.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "bedrock_kb_model" {
   name = "${var.project_name}-bedrock-kb-model-policy"
   role = aws_iam_role.bedrock_kb.id
@@ -282,15 +364,19 @@ resource "aws_bedrockagent_knowledge_base" "main" {
   }
 
   storage_configuration {
-    type = "S3"
-    s3_configuration {
-      bucket_arn = aws_s3_bucket.recipes.arn
+    type = "S3_VECTORS"
+    s3vectors_configuration {
+      s3_vector_bucket_arn = aws_s3vectors_vector_bucket.vectors.arn
+      vector_index_arn     = aws_s3vectors_index.main.arn
     }
   }
 
   depends_on = [
     aws_iam_role_policy.bedrock_kb_model,
     aws_iam_role_policy.bedrock_kb_s3,
+    aws_iam_role_policy.bedrock_kb_s3vectors,
+    aws_s3vectors_vector_bucket.vectors,
+    aws_s3vectors_index.main,
   ]
 
   tags = {

@@ -18,6 +18,16 @@ output "s3_bucket_name" {
   value       = aws_s3_bucket.recipes.id
 }
 
+output "s3_vectors_bucket_name" {
+  description = "Name of the S3 Vectors bucket for embedding storage"
+  value       = aws_s3vectors_vector_bucket.vectors.vector_bucket_name
+}
+
+output "s3_vectors_index_arn" {
+  description = "ARN of the S3 Vectors index"
+  value       = aws_s3vectors_index.main.arn
+}
+
 output "cognito_user_pool_id" {
   description = "ID of the Cognito User Pool"
   value       = aws_cognito_user_pool.main.id
