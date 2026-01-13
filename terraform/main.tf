@@ -205,6 +205,63 @@ resource "aws_s3_bucket_public_access_block" "recipes" {
   restrict_public_buckets = true
 }
 
+# S3 Vectors - Vector Bucket for storing embeddings
+resource "aws_s3vectors_vector_bucket" "vectors" {
+  vector_bucket_name = "${var.project_name}-vectors-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Name = "${var.project_name}-vectors"
+  }
+}
+
+# S3 Vectors - Vector Index for semantic search
+resource "aws_s3vectors_index" "main" {
+  vector_bucket_arn = aws_s3vectors_vector_bucket.vectors.arn
+  index_name        = "bedrock-knowledge-base-index"
+
+  # Vector dimensions for Titan Embeddings v2 (1024 when used with Bedrock KB)
+  dimension = 1024
+
+  tags = {
+    Name = "${var.project_name}-vector-index"
+  }
+}
+
+# S3 Vectors - Bucket Policy for Bedrock access
+resource "aws_s3vectors_vector_bucket_policy" "bedrock_access" {
+  vector_bucket_name = aws_s3vectors_vector_bucket.vectors.vector_bucket_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "BedrockKnowledgeBaseAccess"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock.amazonaws.com"
+        }
+        Action = [
+          "s3vectors:GetVectorIndex",
+          "s3vectors:QueryVectorIndex",
+          "s3vectors:PutVectorIndex",
+          "s3vectors:DeleteVectorIndex"
+        ]
+        Resource = [
+          aws_s3vectors_vector_bucket.vectors.arn,
+          "${aws_s3vectors_vector_bucket.vectors.arn}/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_s3vectors_vector_bucket.vectors]
+}
+
 # IAM Role for Bedrock Knowledge Base
 resource "aws_iam_role" "bedrock_kb" {
   name = "${var.project_name}-bedrock-kb-role"
@@ -238,11 +295,38 @@ resource "aws_iam_role_policy" "bedrock_kb_s3" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
           "s3:ListBucket"
         ]
         Resource = [
           aws_s3_bucket.recipes.arn,
           "${aws_s3_bucket.recipes.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "bedrock_kb_s3vectors" {
+  name = "${var.project_name}-bedrock-kb-s3vectors-policy"
+  role = aws_iam_role.bedrock_kb.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:GetVectorIndex",
+          "s3vectors:QueryVectorIndex",
+          "s3vectors:PutVectorIndex",
+          "s3vectors:DeleteVectorIndex",
+          "s3vectors:ListVectorIndexes"
+        ]
+        Resource = [
+          aws_s3vectors_vector_bucket.vectors.arn,
+          "${aws_s3vectors_vector_bucket.vectors.arn}/*"
         ]
       }
     ]
@@ -267,212 +351,6 @@ resource "aws_iam_role_policy" "bedrock_kb_model" {
   })
 }
 
-resource "aws_iam_role_policy" "bedrock_kb_aoss" {
-  name = "${var.project_name}-bedrock-kb-aoss-policy"
-  role = aws_iam_role.bedrock_kb.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "aoss:APIAccessAll"
-        ]
-        Resource = aws_opensearchserverless_collection.main.arn
-      }
-    ]
-  })
-
-  depends_on = [
-    aws_opensearchserverless_collection.main
-  ]
-}
-
-# OpenSearch Serverless Security Policies (must be created first)
-resource "aws_opensearchserverless_security_policy" "encryption" {
-  name = "${var.project_name}-encryption-policy"
-  type = "encryption"
-  policy = jsonencode({
-    Rules = [
-      {
-        Resource = [
-          "collection/${var.project_name}-vectors"
-        ]
-        ResourceType = "collection"
-      }
-    ]
-    AWSOwnedKey = true
-  })
-}
-
-resource "aws_opensearchserverless_security_policy" "network" {
-  name = "${var.project_name}-network-policy"
-  type = "network"
-  policy = jsonencode([
-    {
-      Rules = [
-        {
-          Resource = [
-            "collection/${var.project_name}-vectors"
-          ]
-          ResourceType = "collection"
-        }
-      ]
-      AllowFromPublic = true
-    }
-  ])
-}
-
-# OpenSearch Serverless Collection for Vector Storage
-resource "aws_opensearchserverless_collection" "main" {
-  name = "${var.project_name}-vectors"
-  type = "VECTORSEARCH"
-
-  depends_on = [
-    aws_opensearchserverless_security_policy.encryption,
-    aws_opensearchserverless_security_policy.network
-  ]
-
-  tags = {
-    Name = "${var.project_name}-vectors"
-  }
-}
-
-resource "aws_opensearchserverless_access_policy" "main" {
-  name = "${var.project_name}-access-policy"
-  type = "data"
-  policy = jsonencode([
-    {
-      Rules = [
-        {
-          Resource = [
-            "collection/${var.project_name}-vectors"
-          ]
-          Permission = [
-            "aoss:CreateCollectionItems",
-            "aoss:DeleteCollectionItems",
-            "aoss:UpdateCollectionItems",
-            "aoss:DescribeCollectionItems"
-          ]
-          ResourceType = "collection"
-        },
-        {
-          Resource = [
-            "index/${var.project_name}-vectors/*"
-          ]
-          Permission = [
-            "aoss:CreateIndex",
-            "aoss:DeleteIndex",
-            "aoss:UpdateIndex",
-            "aoss:DescribeIndex",
-            "aoss:ReadDocument",
-            "aoss:WriteDocument"
-          ]
-          ResourceType = "index"
-        }
-      ]
-      Principal = concat([
-        aws_iam_role.bedrock_kb.arn,
-        aws_iam_role.ecs_task_execution.arn,
-        aws_iam_role.ecs_task.arn,
-        data.aws_caller_identity.current.arn
-      ], var.additional_aoss_principals)
-    }
-  ])
-
-  depends_on = [
-    aws_opensearchserverless_collection.main
-  ]
-}
-
-# Create the vector index in OpenSearch Serverless
-# resource "null_resource" "create_index" {
-#   triggers = {
-#     collection_endpoint = aws_opensearchserverless_collection.main.collection_endpoint
-#   }
-
-#   provisioner "local-exec" {
-#     command = <<-EOT
-#       python3 << 'PYTHON_EOF'
-# import boto3
-# import json
-# import time
-# from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
-
-# # Wait for collection to be ready
-# time.sleep(30)
-
-# # Get AWS credentials
-# session = boto3.Session()
-# credentials = session.get_credentials()
-# auth = AWSV4SignerAuth(credentials, '${var.aws_region}', 'aoss')
-# # auth = AWSV4SignerAuth(credentials, 'us-east-1', 'aoss')
-
-# # Parse endpoint (remove https://)
-# # endpoint = 'https://mb6jexmg9xix2boo3av4.us-east-1.aoss.amazonaws.com'.replace('https://', '')
-# endpoint = '${aws_opensearchserverless_collection.main.collection_endpoint}'.replace('https://', '')
-
-# # Create OpenSearch client
-# client = OpenSearch(
-#     hosts=[{'host': endpoint, 'port': 443}],
-#     http_auth=auth,
-#     use_ssl=True,
-#     verify_certs=True,
-#     connection_class=RequestsHttpConnection,
-#     timeout=30
-# )
-
-# # Create index
-# index_name = 'bedrock-knowledge-base-index'
-# index_body = {
-#     'settings': {
-#         'index': {
-#             'knn': True
-#         }
-#     },
-#     'mappings': {
-#         'properties': {
-#             'bedrock-knowledge-base-default-vector': {
-#                 'type': 'knn_vector',
-#                 'dimension': 1536,
-#                 'method': {
-#                     'engine': 'faiss',
-#                     'space_type': 'l2',
-#                     'name': 'hnsw'
-#                 }
-#             },
-#             'AMAZON_BEDROCK_TEXT_CHUNK': {
-#                 'type': 'text'
-#             },
-#             'AMAZON_BEDROCK_METADATA': {
-#                 'type': 'text',
-#                 'index': False
-#             }
-#         }
-#     }
-# }
-
-# try:
-#     if not client.indices.exists(index=index_name):
-#         response = client.indices.create(index=index_name, body=index_body)
-#         print(f"Index created: {response}")
-#     else:
-#         print(f"Index {index_name} already exists")
-# except Exception as e:
-#     print(f"Error creating index: {e}")
-#     raise
-
-# PYTHON_EOF
-#     EOT
-#   }
-
-#   depends_on = [
-#     aws_opensearchserverless_collection.main,
-#     aws_opensearchserverless_access_policy.main
-#   ]
-# }
-
 # Bedrock Knowledge Base
 resource "aws_bedrockagent_knowledge_base" "main" {
   name     = var.knowledge_base_name
@@ -480,29 +358,25 @@ resource "aws_bedrockagent_knowledge_base" "main" {
 
   knowledge_base_configuration {
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v1"
+      embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v2:0"
     }
     type = "VECTOR"
   }
 
   storage_configuration {
-    type = "OPENSEARCH_SERVERLESS"
-    opensearch_serverless_configuration {
-      collection_arn    = aws_opensearchserverless_collection.main.arn
-      vector_index_name = "bedrock-knowledge-base-index"
-      field_mapping {
-        vector_field   = "bedrock-knowledge-base-default-vector"
-        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
-        metadata_field = "AMAZON_BEDROCK_METADATA"
-      }
+    type = "S3_VECTORS"
+    s3vectors_configuration {
+      s3_vector_bucket_arn = aws_s3vectors_vector_bucket.vectors.arn
+      vector_index_arn     = aws_s3vectors_index.main.arn
     }
   }
 
   depends_on = [
-    aws_opensearchserverless_collection.main,
-    aws_opensearchserverless_access_policy.main,
     aws_iam_role_policy.bedrock_kb_model,
-    aws_iam_role_policy.bedrock_kb_aoss,
+    aws_iam_role_policy.bedrock_kb_s3,
+    aws_iam_role_policy.bedrock_kb_s3vectors,
+    aws_s3vectors_vector_bucket.vectors,
+    aws_s3vectors_index.main,
   ]
 
   tags = {

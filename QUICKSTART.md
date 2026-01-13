@@ -9,7 +9,7 @@ A complete Infrastructure-as-Code (IaC) solution for a cooking recipe chatbot wi
 - **Frontend**: Chainlit web application
 - **Backend**: AWS Bedrock with Claude 3 model
 - **Knowledge Base**: AWS Bedrock Knowledge Base with RAG
-- **Storage**: S3 for recipes, OpenSearch Serverless for vectors
+- **Storage**: S3 for recipes and vector embeddings
 - **Auth**: AWS Cognito with SSO support
 - **Hosting**: ECS Fargate with Application Load Balancer
 - **Network**: VPC with public/private subnets, NAT Gateways
@@ -136,12 +136,11 @@ Open the URL, sign up with Cognito, and start chatting!
 | ECS Fargate (2 tasks) | Run Chainlit app | $30-50 |
 | Application Load Balancer | Traffic routing | $20-25 |
 | NAT Gateway (2 AZs) | Internet for private subnets | $60-80 |
-| OpenSearch Serverless | Vector storage | $50-100 |
 | Cognito | Authentication | Free tier |
-| S3 | Recipe storage | $1-5 |
+| S3 | Recipe storage + vectors | $1-5 |
 | Bedrock | AI model usage | Pay per request |
 | CloudWatch Logs | Application logs | $1-5 |
-| **Total Base Cost** | | **~$160-265/month** |
+| **Total Base Cost** | | **~$110-165/month** |
 
 ### Network Architecture
 

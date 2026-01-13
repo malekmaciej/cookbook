@@ -23,10 +23,9 @@ This project implements a serverless, scalable chatbot solution with the followi
                                                     ┌──────────────────┴──────────────┐
                                                     ▼                                 ▼
                                               ┌──────────┐                    ┌──────────────┐
-                                              │    S3    │                    │  OpenSearch  │
-                                              │ (Recipes)│                    │  Serverless  │
-                                              └──────────┘                    │  (Vectors)   │
-                                                                              └──────────────┘
+                                              │    S3    │                    │      S3      │
+                                              │ (Recipes)│                    │   (Vectors)  │
+                                              └──────────┘                    └──────────────┘
 ```
 
 ### Components
@@ -37,7 +36,7 @@ This project implements a serverless, scalable chatbot solution with the followi
 - **AWS Bedrock**: AI model (Claude 3) for natural language processing
 - **Bedrock Knowledge Base**: RAG (Retrieval-Augmented Generation) system for recipe queries
 - **Amazon S3**: Storage for recipe documents
-- **OpenSearch Serverless**: Vector database for semantic search
+- **Amazon S3 Vectors**: Vector storage and semantic search for embeddings
 - **VPC**: Isolated network with public and private subnets
 
 ## Prerequisites
@@ -197,11 +196,10 @@ Approximate monthly costs (us-east-1):
 - **ECS Fargate**: ~$30-50 (2 tasks, 1 vCPU, 2GB RAM)
 - **Application Load Balancer**: ~$20-25
 - **NAT Gateway**: ~$30-40 (per AZ)
-- **OpenSearch Serverless**: ~$50-100 (based on usage)
 - **Bedrock**: Pay per request (varies with usage)
-- **S3**: ~$1-5 (based on storage)
+- **S3**: ~$1-5 (based on storage and vector operations)
 
-**Total**: ~$130-220/month base cost + Bedrock usage
+**Total**: ~$80-120/month base cost + Bedrock usage
 
 ## Security Features
 
