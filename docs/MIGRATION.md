@@ -169,7 +169,17 @@ terraform destroy -target=aws_opensearchserverless_security_policy.encryption
 
 3. **Last resort only**: Remove from state if resources are already deleted manually:
 ```bash
-# ⚠️ WARNING: Only use this if resources are confirmed deleted in AWS Console
+# ⚠️ CRITICAL WARNING: Only use this if ALL of the following are true:
+#    1. Resources are confirmed deleted in AWS Console
+#    2. Resources cannot be imported back into Terraform
+#    3. Normal Terraform operations have failed
+#
+# This can lead to orphaned resources if not used carefully!
+
+# First, try to import the resources if they still exist:
+# terraform import aws_opensearchserverless_collection.main <collection-id>
+
+# Only if import fails because resources are truly deleted:
 terraform state rm aws_opensearchserverless_collection.main
 terraform state rm aws_opensearchserverless_access_policy.main
 terraform state rm aws_opensearchserverless_security_policy.encryption
@@ -179,17 +189,24 @@ terraform state rm aws_opensearchserverless_security_policy.network
 terraform apply
 ```
 
-**Important**: Manually removing resources from state should only be done as a last resort when resources are confirmed to be already deleted in the AWS Console, as it can lead to orphaned resources and state inconsistencies.
+**Important**: Manually removing resources from state should only be done as a last resort when:
+- Resources are confirmed to be already deleted in the AWS Console
+- You cannot import them back with `terraform import`
+- Normal Terraform operations have failed
+This can lead to orphaned resources and state inconsistencies if misused.
 
 ### Issue: Knowledge Base ingestion fails
 
 **Solution**: Check IAM permissions and S3 bucket access:
 
 ```bash
+# Get project name from Terraform
+PROJECT_NAME=$(terraform output -raw project_name 2>/dev/null || echo "cookbook-chatbot")
+
 # Verify KB role has S3 permissions
 aws iam get-role-policy \
-  --role-name cookbook-chatbot-bedrock-kb-role \
-  --policy-name cookbook-chatbot-bedrock-kb-s3-policy
+  --role-name ${PROJECT_NAME}-bedrock-kb-role \
+  --policy-name ${PROJECT_NAME}-bedrock-kb-s3-policy
 
 # Verify S3 bucket exists and has content
 BUCKET_NAME=$(terraform output -raw s3_bucket_name)

@@ -3,6 +3,11 @@ output "alb_dns_name" {
   value       = aws_lb.main.dns_name
 }
 
+output "project_name" {
+  description = "Project name used for resource naming"
+  value       = var.project_name
+}
+
 output "knowledge_base_id" {
   description = "ID of the Bedrock Knowledge Base"
   value       = aws_bedrockagent_knowledge_base.main.id
