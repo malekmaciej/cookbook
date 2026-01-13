@@ -32,7 +32,7 @@ Before deploying, you need to enable model access in AWS Bedrock:
 2. Click "Enable specific models"
 3. Enable the following models:
    - **Anthropic Claude 3 Sonnet** (for chat)
-   - **Titan Embeddings G1 - Text** (for Knowledge Base)
+   - **Titan Embeddings v2** (for Knowledge Base)
 4. Wait for access to be granted (usually instant)
 
 ### Step 3: Create ECR Repository
@@ -134,9 +134,8 @@ terraform apply
 - ECS Cluster and Service (Fargate)
 - Application Load Balancer
 - Cognito User Pool
-- S3 Bucket for recipes
-- OpenSearch Serverless collection
-- Bedrock Knowledge Base
+- S3 Bucket for recipes and vector storage
+- Bedrock Knowledge Base (with S3 vector store)
 - IAM Roles and Policies
 - CloudWatch Log Groups
 

@@ -46,9 +46,9 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
                                     │          │                    │   │
                                     │          ▼                    ▼   │
                                     │  ┌────────────┐      ┌────────────┐
-                                    │  │ Amazon S3  │      │ OpenSearch │
-                                    │  │  Bucket    │      │ Serverless │
-                                    │  │ (Recipes)  │      │  (Vectors) │
+                                    │  │ Amazon S3  │      │ Amazon S3  │
+                                    │  │  Bucket    │      │  Vectors   │
+                                    │  │ (Recipes)  │      │ (Vectors)  │
                                     │  └────────────┘      └────────────┘
                                     │                                     │
                                     └─────────────────────────────────────┘
@@ -185,8 +185,8 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 
 **Knowledge Base Resource**:
 - Type: VECTOR
-- Embedding model: Amazon Titan Embeddings G1 Text
-- Vector dimensions: 1536
+- Embedding model: Amazon Titan Embeddings v2
+- Vector dimensions: 1024 (for v2 model)
 
 **Data Source**:
 - Type: S3
@@ -194,22 +194,22 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - Supported formats: PDF, TXT, MD, DOCX, HTML
 
 **Vector Store**:
-- Backend: OpenSearch Serverless
-- Collection type: VECTORSEARCH
-- Index: bedrock-knowledge-base-index
+- Backend: Amazon S3
+- Storage: Vectors stored in S3 managed by Bedrock
+- Index: Managed automatically by Bedrock
 
 **Ingestion Process**:
 1. Documents uploaded to S3
 2. Ingestion job triggered
 3. Documents parsed and chunked
-4. Chunks embedded using Titan
-5. Vectors stored in OpenSearch
+4. Chunks embedded using Titan v2
+5. Vectors stored in S3 (managed by Bedrock)
 6. Metadata indexed for retrieval
 
 **Query Process**:
 1. User query received
-2. Query embedded using Titan
-3. Semantic search in OpenSearch
+2. Query embedded using Titan v2
+3. Semantic search in S3 vector store
 4. Top-K documents retrieved
 5. Retrieved context + query sent to Claude
 6. Generated response with citations
@@ -226,25 +226,9 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 
 **Supported Content**:
 - Recipe documents (PDF, TXT, MD, DOCX)
+- Vector embeddings (managed by Bedrock)
 - Images (optional, for future use)
 - Metadata files
-
-### 8. OpenSearch Serverless
-
-**Purpose**: Vector database for semantic search
-
-**Collection**:
-- Type: VECTORSEARCH
-- Capacity: On-demand (auto-scaling)
-- Encryption: AWS-managed keys
-
-**Access Policy**:
-- Bedrock KB role: Full access
-- ECS task role: Read access
-
-**Network Policy**:
-- Public endpoint (within AWS network)
-- VPC endpoint support available
 
 ### 9. CloudWatch
 
@@ -311,8 +295,8 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
    - API: retrieve_and_generate
    - Parameters: user query, KB ID, model ARN
 3. Bedrock → Knowledge Base: Retrieve relevant docs
-4. Knowledge Base → OpenSearch: Vector search
-5. OpenSearch → Knowledge Base: Return top-K results
+4. Knowledge Base → S3: Vector search
+5. S3 → Knowledge Base: Return top-K results
 6. Knowledge Base → Bedrock: Return documents + metadata
 7. Bedrock → Claude: Generate response with context
 8. Claude → Bedrock: Generated response
@@ -327,10 +311,10 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 2. Admin → Bedrock Agent: Start ingestion job
 3. Bedrock Agent → S3: Fetch document
 4. Bedrock Agent → Parse and chunk document
-5. Bedrock Agent → Titan: Generate embeddings
+5. Bedrock Agent → Titan v2: Generate embeddings
 6. Titan → Bedrock Agent: Return vectors
-7. Bedrock Agent → OpenSearch: Store vectors + metadata
-8. OpenSearch → Bedrock Agent: Confirm storage
+7. Bedrock Agent → S3: Store vectors + metadata
+8. S3 → Bedrock Agent: Confirm storage
 9. Bedrock Agent → Admin: Ingestion complete
 ```
 
@@ -339,7 +323,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 ### Horizontal Scaling
 - **ECS**: Increase desired task count
 - **ALB**: Automatically scales to handle traffic
-- **OpenSearch**: On-demand capacity mode
+- **S3**: Serverless, scales automatically
 - **Bedrock**: Serverless, auto-scales
 
 ### Vertical Scaling
@@ -378,7 +362,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 - **ECS**: Multiple tasks across AZs
 - **ALB**: Cross-zone load balancing enabled
 - **NAT Gateway**: One per AZ for redundancy
-- **OpenSearch**: Serverless with automatic replication
+- **S3**: Automatic replication and durability (11 9's)
 
 ## Security
 
@@ -413,7 +397,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 - ECS: Task CPU/memory, running count
 - ALB: Request rate, latency, 5xx errors
 - Bedrock: API calls, throttling, latency
-- OpenSearch: Request rate, indexing rate
+- S3: Request rate, storage metrics
 
 ### Logs
 - Application logs: CloudWatch Logs
@@ -432,23 +416,21 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 - ECS Fargate: ~$30-50/month (2 tasks)
 - ALB: ~$20-25/month
 - NAT Gateway: ~$60-80/month (2 AZs)
-- OpenSearch Serverless: ~$50-100/month
 - Bedrock: Variable, pay per request
-- S3: ~$1-5/month
+- S3: ~$1-5/month (storage and vector operations)
 
 ### Optimization Strategies
 1. **Reduce NAT Gateways**: Use 1 NAT for dev environments
 2. **Spot Instances**: Not available for Fargate
 3. **Reserved Capacity**: Not applicable for serverless
 4. **Right-size ECS tasks**: Monitor and adjust CPU/memory
-5. **OpenSearch**: Use VPC endpoint to avoid data transfer costs
-6. **S3**: Use Intelligent-Tiering for old recipes
+5. **S3**: Use Intelligent-Tiering for old recipes
+6. **Bedrock**: Monitor and optimize query patterns
 
 ## Disaster Recovery
 
 ### Backup Strategy
-- **S3**: Versioning enabled for recipe documents
-- **OpenSearch**: Automatic snapshots (serverless)
+- **S3**: Versioning enabled for recipe documents and vectors
 - **Terraform State**: Store in S3 with versioning
 
 ### Recovery Procedures

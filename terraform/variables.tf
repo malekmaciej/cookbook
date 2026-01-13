@@ -86,9 +86,3 @@ variable "allowed_email_domains" {
   type        = list(string)
   default     = []
 }
-
-variable "additional_aoss_principals" {
-  description = "Additional IAM principal ARNs to grant access to OpenSearch Serverless collection"
-  type        = list(string)
-  default     = []
-}

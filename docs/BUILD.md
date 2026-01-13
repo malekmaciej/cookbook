@@ -251,9 +251,8 @@ aws ecr delete-repository \
 ```
 
 **Warning**: This will delete all resources including:
-- S3 bucket with recipes (if not protected)
+- S3 bucket with recipes and vectors (if not protected)
 - CloudWatch logs
-- OpenSearch collection
 - All networking resources
 
 Make sure to backup any important data before destroying!
