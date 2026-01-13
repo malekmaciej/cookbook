@@ -186,7 +186,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 **Knowledge Base Resource**:
 - Type: VECTOR
 - Embedding model: Amazon Titan Embeddings v2
-- Vector dimensions: 1024 (default for v2 model, also supports 256 and 512)
+- Vector dimensions: Configurable (256, 512, 1024, or 1536), defaults to 1024 when using Bedrock Knowledge Base
 
 **Data Source**:
 - Type: S3

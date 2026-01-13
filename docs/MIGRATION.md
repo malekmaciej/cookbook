@@ -151,10 +151,25 @@ terraform apply
 
 ### Issue: Terraform fails to destroy OpenSearch resources
 
-**Solution**: Sometimes OpenSearch resources have dependencies. Try:
+**Solution**: Sometimes OpenSearch resources have dependencies. Try these steps in order:
 
+1. First, try refreshing the state:
 ```bash
-# Remove from state if already deleted manually
+terraform refresh
+terraform plan
+```
+
+2. If that doesn't work, try destroying with a target:
+```bash
+terraform destroy -target=aws_opensearchserverless_access_policy.main
+terraform destroy -target=aws_opensearchserverless_collection.main
+terraform destroy -target=aws_opensearchserverless_security_policy.network
+terraform destroy -target=aws_opensearchserverless_security_policy.encryption
+```
+
+3. **Last resort only**: Remove from state if resources are already deleted manually:
+```bash
+# ⚠️ WARNING: Only use this if resources are confirmed deleted in AWS Console
 terraform state rm aws_opensearchserverless_collection.main
 terraform state rm aws_opensearchserverless_access_policy.main
 terraform state rm aws_opensearchserverless_security_policy.encryption
@@ -163,6 +178,8 @@ terraform state rm aws_opensearchserverless_security_policy.network
 # Then apply
 terraform apply
 ```
+
+**Important**: Manually removing resources from state should only be done as a last resort when resources are confirmed to be already deleted in the AWS Console, as it can lead to orphaned resources and state inconsistencies.
 
 ### Issue: Knowledge Base ingestion fails
 
