@@ -173,7 +173,7 @@ def get_recipe(path: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error getting recipe from {path}: {e}")
-        return {"error": str(e)}
+        raise
 
 
 @mcp.tool()

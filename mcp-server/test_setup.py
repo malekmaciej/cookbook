@@ -39,9 +39,9 @@ except Exception as e:
 finally:
     # Clean up test environment variables if they were set by us
     if os.getenv("GITHUB_TOKEN") == "test_token":
-        del os.environ["GITHUB_TOKEN"]
+        os.environ.pop("GITHUB_TOKEN", None)
     if os.getenv("GITHUB_REPO") == "test/repo":
-        del os.environ["GITHUB_REPO"]
+        os.environ.pop("GITHUB_REPO", None)
 
 # Test 4: Check required environment variables documentation
 required_vars = ["GITHUB_TOKEN", "GITHUB_REPO"]
