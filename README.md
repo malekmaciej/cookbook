@@ -13,25 +13,28 @@ This repository now includes an **MCP (Model Context Protocol) Server** built wi
 This project implements a serverless, scalable chatbot solution with the following AWS services:
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌─────────────────┐
-│   Internet  │────▶│  ALB + WAF   │────▶│   Cognito   │────▶│   ECS Fargate   │
-│   Users     │     │  (Port 80)   │     │  (Auth)     │     │  (Chainlit App) │
-└─────────────┘     └──────────────┘     └─────────────┘     └────────┬────────┘
-                                                                        │
-                                                                        ▼
-                                                              ┌─────────────────┐
-                                                              │  AWS Bedrock    │
-                                                              │  - Claude Model │
-                                                              │  - Knowledge    │
-                                                              │    Base         │
-                                                              └────────┬────────┘
-                                                                       │
-                                                    ┌──────────────────┴──────────────┐
-                                                    ▼                                 ▼
-                                              ┌──────────┐                    ┌──────────────┐
-                                              │    S3    │                    │      S3      │
-                                              │ (Recipes)│                    │   (Vectors)  │
-                                              └──────────┘                    └──────────────┘
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌─────────────────────┐
+│   Internet  │────▶│  ALB + WAF   │────▶│   Cognito   │────▶│   ECS Fargate       │
+│   Users     │     │  (Port 80)   │     │  (Auth)     │     │  - Chainlit App     │
+└─────────────┘     └──────────────┘     └─────────────┘     │  - MCP Server (opt) │
+                                                               └──────────┬──────────┘
+                                                                          │
+                                              ┌───────────────────────────┼────────────┐
+                                              │                           │            │
+                                              ▼                           ▼            ▼
+                                    ┌─────────────────┐        ┌─────────────────┐   │
+                                    │  AWS Bedrock    │        │   GitHub API    │   │
+                                    │  - Claude Model │        │   (Recipes)     │   │
+                                    │  - Knowledge    │        └─────────────────┘   │
+                                    │    Base         │                              │
+                                    └────────┬────────┘                              │
+                                             │                                       │
+                          ┌──────────────────┴──────────────┐                       │
+                          ▼                                 ▼                       │
+                    ┌──────────┐                    ┌──────────────┐               │
+                    │    S3    │◀───────────────────│      S3      │◀──────────────┘
+                    │ (Recipes)│                    │   (Vectors)  │
+                    └──────────┘                    └──────────────┘
 ```
 
 ### Components

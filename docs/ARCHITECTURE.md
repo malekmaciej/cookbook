@@ -7,51 +7,53 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 ## Architecture Diagram
 
 ```
-                                    ┌─────────────────────────────────────┐
-                                    │         AWS Cloud                   │
-                                    │                                     │
-┌──────────┐                       │  ┌────────────────────────────┐    │
-│          │                       │  │    Application Load         │    │
-│  Users   │──────HTTPS───────────▶│  │    Balancer (ALB)          │    │
-│          │                       │  │  - Public Subnets          │    │
-└──────────┘                       │  │  - Port 80/443             │    │
-                                    │  └──────────┬─────────────────┘    │
-                                    │             │                      │
-                                    │             ▼                      │
-                                    │  ┌────────────────────────────┐    │
-                                    │  │   AWS Cognito User Pool    │    │
-                                    │  │  - Authentication          │    │
-                                    │  │  - AWS SSO Integration     │    │
-                                    │  └──────────┬─────────────────┘    │
-                                    │             │                      │
-                                    │             ▼                      │
-                                    │  ┌────────────────────────────┐    │
-                                    │  │      ECS Fargate           │    │
-                                    │  │  - Private Subnets         │    │
-                                    │  │  - Chainlit App            │    │
-                                    │  │  - Auto Scaling            │    │
-                                    │  └──────────┬─────────────────┘    │
-                                    │             │                      │
-                                    │   ┌─────────┴──────────┐           │
-                                    │   │                    │           │
-                                    │   ▼                    ▼           │
-                                    │  ┌──────────┐   ┌──────────────┐  │
-                                    │  │   AWS    │   │   Bedrock    │  │
-                                    │  │  Bedrock │   │   Knowledge  │  │
-                                    │  │  Runtime │   │   Base       │  │
-                                    │  │ (Claude) │   │   (RAG)      │  │
-                                    │  └──────────┘   └──────┬───────┘  │
-                                    │                        │          │
-                                    │          ┌─────────────┴──────┐   │
-                                    │          │                    │   │
-                                    │          ▼                    ▼   │
-                                    │  ┌────────────┐      ┌────────────┐
-                                    │  │ Amazon S3  │      │ Amazon S3  │
-                                    │  │  Bucket    │      │  Vectors   │
-                                    │  │ (Recipes)  │      │ (Vectors)  │
-                                    │  └────────────┘      └────────────┘
-                                    │                                     │
-                                    └─────────────────────────────────────┘
+                                    ┌─────────────────────────────────────────────┐
+                                    │         AWS Cloud                           │
+                                    │                                             │
+┌──────────┐                       │  ┌────────────────────────────┐            │
+│          │                       │  │    Application Load         │            │
+│  Users   │──────HTTPS───────────▶│  │    Balancer (ALB)          │            │
+│          │                       │  │  - Public Subnets          │            │
+└──────────┘                       │  │  - Port 80/443             │            │
+                                    │  └──────────┬─────────────────┘            │
+                                    │             │                              │
+                                    │             ▼                              │
+                                    │  ┌────────────────────────────┐            │
+                                    │  │   AWS Cognito User Pool    │            │
+                                    │  │  - Authentication          │            │
+                                    │  │  - AWS SSO Integration     │            │
+                                    │  └──────────┬─────────────────┘            │
+                                    │             │                              │
+                                    │             ▼                              │
+                                    │  ┌────────────────────────────┐            │
+                                    │  │      ECS Fargate           │            │
+                                    │  │  - Private Subnets         │            │
+                                    │  │  - Chainlit App            │            │
+                                    │  │  - MCP Server (Optional)   │            │
+                                    │  │  - Auto Scaling            │            │
+                                    │  └──────────┬─────────────────┘            │
+                                    │             │                              │
+                                    │   ┌─────────┴──────────┬───────────┐       │
+                                    │   │                    │           │       │
+                                    │   ▼                    ▼           ▼       │
+                                    │  ┌──────────┐   ┌──────────────┐  │       │
+                                    │  │   AWS    │   │   Bedrock    │  │       │
+                                    │  │  Bedrock │   │   Knowledge  │  │       │
+                                    │  │  Runtime │   │   Base       │  │       │
+                                    │  │ (Claude) │   │   (RAG)      │  │       │
+                                    │  └──────────┘   └──────┬───────┘  │       │
+                                    │                        │          │       │
+                                    │          ┌─────────────┴──────┐   │       │
+                                    │          │                    │   │       │
+                                    │          ▼                    ▼   ▼       │
+                        ┌───────────┼──┌────────────┐      ┌────────────┐      │
+                        │           │  │ Amazon S3  │      │ Amazon S3  │      │
+                        │           │  │  Bucket    │      │  Vectors   │      │
+    ┌──────────────┐   │           │  │ (Recipes)  │      │ (Vectors)  │      │
+    │   GitHub     │◀──┘           │  └────────────┘      └────────────┘      │
+    │   API        │                │                                          │
+    │  (Recipes)   │                │                                          │
+    └──────────────┘                └─────────────────────────────────────────┘
 ```
 
 ## Components
@@ -165,7 +167,50 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - **Task Execution Role**: Pull images, write logs
 - **Task Role**: Access Bedrock, S3, Knowledge Base
 
-### 5. AWS Bedrock
+### 5. MCP Server (Optional)
+
+**Purpose**: Programmatic recipe access via Model Context Protocol
+
+**Overview**:
+The MCP (Model Context Protocol) Server is an optional component that provides programmatic access to recipes stored in a GitHub repository. It enables chatbots and AI assistants to interact with recipes through standardized MCP tools and resources.
+
+**Deployment**:
+- Can run as an additional container in the same ECS task definition
+- Runs on port 8000 (or configurable port)
+- Uses FastMCP 2.0 framework
+- HTTP-based transport (streamable)
+
+**Features**:
+- **Tools**: list_recipes, search_recipes, get_recipe, create_recipe, update_recipe
+- **Resources**: URI-based access to recipe content
+- **GitHub Integration**: Uses PyGithub for repository operations
+
+**Configuration**:
+- Environment variables:
+  - `GITHUB_TOKEN`: GitHub personal access token
+  - `GITHUB_REPO`: Target repository (e.g., `malekmaciej/przepisy`)
+  - `RECIPES_PATH`: Root path for recipes in repository
+  - `MCP_HOST`: Server host (default: `0.0.0.0`)
+  - `MCP_PORT`: Server port (default: `8000`)
+  - `MCP_PATH`: Endpoint path (default: `/mcp`)
+
+**Data Source**:
+- Primary: GitHub repository
+- Fallback/sync: S3 bucket (for Bedrock Knowledge Base)
+
+**Security**:
+- GitHub token should be stored in AWS Secrets Manager
+- IAM role for ECS task to access Secrets Manager
+- Input validation for all API calls
+- Rate limiting recommended for production
+
+**Use Cases**:
+- AI assistants that need direct recipe manipulation
+- External integrations via MCP protocol
+- Recipe management automation
+- Multi-source recipe aggregation
+
+### 6. AWS Bedrock
 
 **Purpose**: Large Language Model (LLM) inference
 
@@ -177,7 +222,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - `bedrock-runtime:InvokeModel` - Direct model calls
 - `bedrock-runtime:InvokeModelWithResponseStream` - Streaming responses
 
-### 6. AWS Bedrock Knowledge Base
+### 7. AWS Bedrock Knowledge Base
 
 **Purpose**: Retrieval-Augmented Generation (RAG) for recipes
 
@@ -215,7 +260,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 5. Retrieved context + query sent to Claude
 6. Generated response with citations
 
-### 7. Amazon S3
+### 8. Amazon S3
 
 **Purpose**: Storage for recipe documents
 
@@ -230,7 +275,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - Images (optional, for future use)
 - Metadata files
 
-### 8. Amazon S3 Vectors
+### 9. Amazon S3 Vectors
 
 **Purpose**: Vector storage and semantic search
 
@@ -249,7 +294,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - IAM policies for read/write operations
 - Scoped to specific AWS account
 
-### 9. CloudWatch
+### 10. CloudWatch
 
 **Purpose**: Logging and monitoring
 
@@ -263,7 +308,7 @@ The CookBook Chatbot is a cloud-native, serverless application that provides an 
 - ALB: Request count, latency, target health
 - Bedrock: API calls, latency, errors
 
-### 10. IAM (Identity and Access Management)
+### 11. IAM (Identity and Access Management)
 
 **Roles and Policies**:
 
