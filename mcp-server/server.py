@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize MCP server
 mcp = FastMCP(
-    name="Recipe MCP Server",
-    dependencies=["PyGithub"]
+    name="Recipe MCP Server"
 )
 
 # GitHub configuration
@@ -107,7 +106,7 @@ def list_recipes() -> List[Dict[str, Any]]:
         return recipes
     except Exception as e:
         logger.error(f"Error listing recipes: {e}")
-        return {"error": str(e)}
+        raise
 
 
 @mcp.tool()
@@ -127,13 +126,15 @@ def search_recipes(query: str) -> List[Dict[str, Any]]:
         
         query_lower = query.lower()
         
-        for recipe in recipes:
-            # Check if query matches recipe name
-            if query_lower in recipe["name"].lower():
-                matching_recipes.append(recipe)
-                continue
-            
-            # Check if query matches recipe content
+        # First pass: check names (fast)
+        name_matches = [r for r in recipes if query_lower in r["name"].lower()]
+        matching_recipes.extend(name_matches)
+        
+        # Second pass: check content for non-name matches (slower, so limit)
+        # Only check up to 50 recipes to avoid rate limiting
+        content_search_candidates = [r for r in recipes if r not in name_matches][:50]
+        
+        for recipe in content_search_candidates:
             try:
                 content = get_file_content(recipe["path"])
                 if query_lower in content.lower():
@@ -145,7 +146,7 @@ def search_recipes(query: str) -> List[Dict[str, Any]]:
         return matching_recipes
     except Exception as e:
         logger.error(f"Error searching recipes: {e}")
-        return {"error": str(e)}
+        raise
 
 
 @mcp.tool()
