@@ -2,6 +2,12 @@
 
 An AI-powered cooking assistant chatbot for your recipe collection, built with AWS Bedrock, Knowledge Bases, and Chainlit.
 
+## 🆕 MCP Server
+
+This repository now includes an **MCP (Model Context Protocol) Server** built with FastMCP 2.0 that provides programmatic access to recipes stored in a GitHub repository. The MCP server exposes tools and resources for listing, searching, getting, creating, and updating recipes via the standardized MCP protocol.
+
+👉 **[See MCP Server Documentation](mcp-server/README.md)** for setup and usage instructions.
+
 ## Architecture
 
 This project implements a serverless, scalable chatbot solution with the following AWS services:
@@ -33,6 +39,7 @@ This project implements a serverless, scalable chatbot solution with the followi
 - **Application Load Balancer (ALB)**: Entry point for HTTPS traffic with SSL termination
 - **AWS Cognito**: User authentication and authorization with AWS SSO integration
 - **ECS Fargate**: Serverless container hosting for the Chainlit frontend
+- **MCP Server** (Optional): Model Context Protocol server for programmatic recipe access via GitHub
 - **AWS Bedrock**: AI model (Claude 3) for natural language processing
 - **Bedrock Knowledge Base**: RAG (Retrieval-Augmented Generation) system for recipe queries
 - **Amazon S3**: Storage for recipe documents
@@ -242,6 +249,42 @@ aws bedrock-agent start-ingestion-job \
 - **ECS Logs**: Check CloudWatch Logs at `/ecs/cookbook-chatbot`
 - **ALB Metrics**: Monitor in CloudWatch under Application Load Balancer
 - **Bedrock Usage**: Check AWS Cost Explorer
+
+## MCP Server
+
+The MCP (Model Context Protocol) Server provides programmatic access to recipes stored in a GitHub repository using the standardized MCP protocol. This enables chatbots and AI assistants to interact with recipes through well-defined tools and resources.
+
+### Features
+
+- **List Recipes**: Get all available recipes with metadata
+- **Search Recipes**: Find recipes by name or content
+- **Get Recipe**: Retrieve full recipe details
+- **Create Recipe**: Add new recipes to the repository
+- **Update Recipe**: Modify existing recipes
+- **Resources**: Access recipe content via URI-based resources
+
+### Quick Start
+
+See the [MCP Server README](mcp-server/README.md) for detailed instructions on:
+- Local development setup
+- Docker deployment
+- ECS deployment alongside the chatbot
+- API usage examples
+
+### Local Testing
+
+```bash
+cd mcp-server
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your GitHub token
+
+# Run with Docker Compose
+docker-compose up
+```
+
+The MCP server will be available at `http://localhost:8000/mcp`.
 
 ## Cleanup
 
