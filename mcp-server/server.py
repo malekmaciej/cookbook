@@ -131,6 +131,7 @@ def list_recipes() -> List[Dict[str, Any]]:
 def search_recipes(query: str) -> List[Dict[str, Any]]:
     """
     Search for recipes by name found inside the file (first line starting with '#').
+    Files without a '#' header on the first line will be skipped.
     
     Args:
         query: Search term to find in recipe names (from first line of files)

@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Test script to verify the name extraction and search functionality.
 This tests the changes locally without requiring GitHub API access.
@@ -9,7 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 # Mock the server module's extract_recipe_name_from_content function
-def extract_recipe_name_from_content(content: str) -> str:
+def extract_recipe_name_from_content(content: str) -> Optional[str]:
     """
     Extract recipe name from the first line of the file content.
     Recipe name is expected to be on the first line starting with '#'.
@@ -62,7 +63,9 @@ def test_with_sample_recipes():
     """Test with actual sample recipes from the repository"""
     print("\nTesting with sample recipes from repository...")
     
-    sample_recipes_path = "/home/runner/work/cookbook/cookbook/sample-recipes"
+    # Use relative path from current file location
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sample_recipes_path = os.path.join(os.path.dirname(current_dir), "sample-recipes")
     
     # Test with chocolate chip cookies
     cookie_file = os.path.join(sample_recipes_path, "chocolate-chip-cookies.md")
