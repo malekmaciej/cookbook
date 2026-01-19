@@ -616,6 +616,10 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "BEDROCK_MODEL_ID"
           value = var.bedrock_model_id
+        },
+        {
+          name  = "MCP_SERVER_URL"
+          value = var.github_token != "" ? "http://${aws_service_discovery_service.mcp_server[0].name}.${aws_service_discovery_private_dns_namespace.mcp[0].name}:8000/mcp" : ""
         }
       ]
 
