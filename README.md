@@ -43,11 +43,15 @@ This project implements a serverless, scalable chatbot solution with the followi
 - **AWS Cognito**: User authentication and authorization with AWS SSO integration
 - **ECS Fargate**: Serverless container hosting for the Chainlit frontend
 - **MCP Server** (Optional): Model Context Protocol server for programmatic recipe access via GitHub
+  - Deployed as a separate ECS service in the same cluster
+  - Registered with AWS Cloud Map for service discovery at `mcp-server.cookbook-chatbot.local`
+- **AWS Cloud Map**: Service discovery for internal communication between ECS services
 - **AWS Bedrock**: AI model (Claude 3) for natural language processing
 - **Bedrock Knowledge Base**: RAG (Retrieval-Augmented Generation) system for recipe queries
 - **Amazon S3**: Storage for recipe documents
 - **Amazon S3 Vectors**: Vector storage and semantic search for embeddings
 - **VPC**: Isolated network with public and private subnets
+- **AWS Secrets Manager**: Secure storage for GitHub token used by MCP server
 
 ## Prerequisites
 
@@ -80,7 +84,13 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars` and update:
 - `cognito_domain_prefix`: Must be globally unique (e.g., `cookbook-chatbot-yourname-12345`)
 - `container_image`: Will be updated after building and pushing the Docker image
+- `mcp_container_image`: Will be updated if deploying the MCP server
+- `github_token`: Required for MCP server deployment (leave empty to skip MCP server)
 - Other variables as needed for your environment
+
+**Note**: The MCP server is optional. If you don't set `github_token`, only the Chainlit app will be deployed.
+
+See [MCP Server Deployment Guide](terraform/MCP_SERVER_DEPLOYMENT.md) for detailed MCP server setup instructions.
 
 ### 4. Build and Push Docker Image
 
@@ -114,6 +124,35 @@ docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:l
 Update `terraform.tfvars` with the ECR image URI:
 ```hcl
 container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest"
+```
+
+**Optional: Build and Push MCP Server Image**
+
+If you want to deploy the MCP server, also build and push its image:
+
+```bash
+cd ../mcp-server
+
+# Get your AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Create ECR repository for MCP server
+aws ecr create-repository --repository-name recipe-mcp-server --region us-east-1
+
+# Build the MCP server image
+docker build -t recipe-mcp-server:latest .
+
+# Tag the image
+docker tag recipe-mcp-server:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
+
+# Push the image
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
+```
+
+Update `terraform.tfvars` with the MCP server image URI and your GitHub token:
+```hcl
+mcp_container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest"
+github_token = "ghp_your_github_token_here"
 ```
 
 ### 5. Deploy Infrastructure
@@ -203,13 +242,19 @@ See `terraform/variables.tf` for all configurable options:
 
 Approximate monthly costs (us-east-1):
 
-- **ECS Fargate**: ~$30-50 (2 tasks, 1 vCPU, 2GB RAM)
+**Base Infrastructure:**
+- **ECS Fargate (Chainlit)**: ~$30-50 (2 tasks, 1 vCPU, 2GB RAM)
+- **ECS Fargate (MCP Server)**: ~$10-15 (1 task, 0.5 vCPU, 1GB RAM) - Optional
 - **Application Load Balancer**: ~$20-25
 - **NAT Gateway**: ~$30-40 (per AZ)
 - **Bedrock**: Pay per request (varies with usage)
 - **S3**: ~$1-5 (based on storage and vector operations)
+- **AWS Secrets Manager**: ~$0.40/month - If MCP server deployed
+- **AWS Cloud Map**: ~$1/month - If MCP server deployed
 
-**Total**: ~$80-120/month base cost + Bedrock usage
+**Total**: 
+- Without MCP Server: ~$80-120/month base cost + Bedrock usage
+- With MCP Server: ~$92-138/month base cost + Bedrock usage
 
 ## Security Features
 
@@ -220,6 +265,8 @@ Approximate monthly costs (us-east-1):
 - ✅ S3 bucket encryption enabled
 - ✅ IAM roles with least privilege
 - ✅ CloudWatch logging enabled
+- ✅ GitHub tokens stored in AWS Secrets Manager
+- ✅ Service discovery for internal communication
 
 ## Maintenance
 
@@ -233,6 +280,21 @@ Approximate monthly costs (us-east-1):
 aws ecs update-service \
   --cluster cookbook-chatbot-cluster \
   --service cookbook-chatbot-service \
+  --force-new-deployment
+```
+
+### Updating the MCP Server
+
+If you have the MCP server deployed:
+
+1. Make changes to `mcp-server/server.py`
+2. Rebuild and push the Docker image
+3. Update ECS service:
+
+```bash
+aws ecs update-service \
+  --cluster cookbook-chatbot-cluster \
+  --service cookbook-chatbot-mcp-server-service \
   --force-new-deployment
 ```
 
@@ -250,8 +312,10 @@ aws bedrock-agent start-ingestion-job \
 ### Monitoring
 
 - **ECS Logs**: Check CloudWatch Logs at `/ecs/cookbook-chatbot`
+- **MCP Server Logs**: Check CloudWatch Logs at `/ecs/cookbook-chatbot-mcp-server` (if deployed)
 - **ALB Metrics**: Monitor in CloudWatch under Application Load Balancer
 - **Bedrock Usage**: Check AWS Cost Explorer
+- **Service Discovery**: View registered services in AWS Cloud Map console
 
 ## MCP Server
 
@@ -268,10 +332,21 @@ The MCP (Model Context Protocol) Server provides programmatic access to recipes 
 
 ### Quick Start
 
+The MCP server can be deployed to ECS alongside the Chainlit chatbot application using Terraform.
+
+**For ECS Deployment**:
+1. Build and push the MCP server Docker image to ECR (see step 4 below)
+2. Set the `github_token` variable in your `terraform.tfvars`
+3. Run `terraform apply`
+
+The MCP server will be deployed as a separate ECS service and registered with AWS Cloud Map for service discovery at `mcp-server.cookbook-chatbot.local:8000/mcp`.
+
+See the [MCP Server Deployment Guide](terraform/MCP_SERVER_DEPLOYMENT.md) for complete deployment instructions.
+
+**For Local Development**:
 See the [MCP Server README](mcp-server/README.md) for detailed instructions on:
 - Local development setup
 - Docker deployment
-- ECS deployment alongside the chatbot
 - API usage examples
 
 ### Local Testing
