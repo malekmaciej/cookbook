@@ -86,3 +86,47 @@ variable "allowed_email_domains" {
   type        = list(string)
   default     = []
 }
+
+# MCP Server Configuration
+variable "mcp_container_image" {
+  description = "Docker image for the MCP server"
+  type        = string
+  default     = "recipe-mcp-server:latest"
+}
+
+variable "mcp_container_cpu" {
+  description = "CPU units for the MCP server container (1024 = 1 vCPU)"
+  type        = number
+  default     = 512
+}
+
+variable "mcp_container_memory" {
+  description = "Memory for the MCP server container in MB"
+  type        = number
+  default     = 1024
+}
+
+variable "mcp_desired_count" {
+  description = "Desired number of MCP server ECS tasks"
+  type        = number
+  default     = 1
+}
+
+variable "github_token" {
+  description = "GitHub personal access token for MCP server (will be stored in Secrets Manager)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "GitHub repository for recipes (format: owner/repo)"
+  type        = string
+  default     = "malekmaciej/przepisy"
+}
+
+variable "recipes_path" {
+  description = "Root path in the repository for recipes"
+  type        = string
+  default     = ""
+}
