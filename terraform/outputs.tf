@@ -70,5 +70,5 @@ output "service_discovery_namespace" {
 
 output "mcp_server_dns" {
   description = "DNS name for the MCP server via service discovery"
-  value       = var.github_token != "" && length(aws_service_discovery_private_dns_namespace.main) > 0 ? "mcp-server.${aws_service_discovery_private_dns_namespace.main[0].name}" : null
+  value       = var.github_token != "" ? "mcp-server.${aws_service_discovery_private_dns_namespace.main[0].name}" : null
 }
