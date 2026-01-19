@@ -73,6 +73,24 @@ def get_file_content(file_path: str) -> str:
         raise
 
 
+def extract_recipe_name_from_content(content: str) -> Optional[str]:
+    """
+    Extract recipe name from the first line of the file content.
+    Recipe name is expected to be on the first line starting with '#'.
+    
+    Args:
+        content: The full content of the recipe file
+        
+    Returns:
+        The recipe name without the '#' prefix, or None if not found
+    """
+    lines = content.split('\n')
+    if lines and lines[0].startswith('#'):
+        # Remove the '#' and any leading/trailing whitespace
+        return lines[0].lstrip('#').strip()
+    return None
+
+
 def list_recipes_in_path(path: str = "") -> List[Dict[str, Any]]:
     """List all recipe files in a given path"""
     recipes = []
@@ -119,19 +137,29 @@ def list_recipes() -> List[Dict[str, Any]]:
 @mcp.tool()
 def search_recipes(query: str) -> List[Dict[str, Any]]:
     """
+<<<<<<< HEAD
     Search for recipes by name or content.
 
     Args:
         query: Search term to find in recipe names or content
 
+=======
+    Search for recipes by name found inside the file (first line starting with '#').
+    Files without a '#' header on the first line will be skipped.
+    
+    Args:
+        query: Search term to find in recipe names (from first line of files)
+        
+>>>>>>> 4a8dd23d4a555b5a781cb364d5bd95964bd175fb
     Returns:
-        A list of matching recipes with their metadata.
+        A list of matching recipes with their metadata and extracted names.
     """
     try:
         matching_recipes = []
         recipes = list_recipes_in_path(RECIPES_PATH)
 
         query_lower = query.lower()
+<<<<<<< HEAD
 
         # First pass: check names (fast)
         name_matches = [r for r in recipes if query_lower in r["name"].lower()]
@@ -142,13 +170,28 @@ def search_recipes(query: str) -> List[Dict[str, Any]]:
         content_search_candidates = [r for r in recipes if r not in name_matches][:50]
 
         for recipe in content_search_candidates:
+=======
+        
+        # Search by extracting the name from each file's first line
+        for recipe in recipes:
+>>>>>>> 4a8dd23d4a555b5a781cb364d5bd95964bd175fb
             try:
                 content = get_file_content(recipe["path"])
-                if query_lower in content.lower():
-                    matching_recipes.append(recipe)
+                recipe_name = extract_recipe_name_from_content(content)
+                
+                if recipe_name and query_lower in recipe_name.lower():
+                    # Add the extracted name to the recipe metadata
+                    recipe_with_name = recipe.copy()
+                    recipe_with_name["recipe_name"] = recipe_name
+                    matching_recipes.append(recipe_with_name)
             except Exception as e:
+<<<<<<< HEAD
                 logger.warning(f"Could not search content of {recipe['path']}: {e}")
 
+=======
+                logger.warning(f"Could not search recipe at {recipe['path']}: {e}")
+        
+>>>>>>> 4a8dd23d4a555b5a781cb364d5bd95964bd175fb
         logger.info(f"Found {len(matching_recipes)} recipes matching '{query}'")
         return matching_recipes
     except Exception as e:
@@ -165,15 +208,31 @@ def get_recipe(path: str) -> Dict[str, Any]:
         path: Path to the recipe file in the repository
 
     Returns:
-        Recipe content and metadata including name, content, and path.
+        Recipe content and metadata including name (extracted from first line), content, and path.
     """
     try:
         content = get_file_content(path)
+<<<<<<< HEAD
 
         # Extract recipe name from filename
         name = os.path.basename(path).replace(".md", "").replace("-", " ").title()
 
         return {"name": name, "path": path, "content": content}
+=======
+        
+        # Extract recipe name from the first line of the file
+        recipe_name = extract_recipe_name_from_content(content)
+        
+        # Fallback to filename if name extraction fails
+        if not recipe_name:
+            recipe_name = os.path.basename(path).replace(".md", "").replace("-", " ").title()
+        
+        return {
+            "name": recipe_name,
+            "path": path,
+            "content": content
+        }
+>>>>>>> 4a8dd23d4a555b5a781cb364d5bd95964bd175fb
     except Exception as e:
         logger.error(f"Error getting recipe from {path}: {e}")
         raise
