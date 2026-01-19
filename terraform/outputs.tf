@@ -52,3 +52,23 @@ output "ecs_service_name" {
   description = "Name of the ECS service"
   value       = aws_ecs_service.main.name
 }
+
+output "mcp_server_service_name" {
+  description = "Name of the MCP server ECS service"
+  value       = var.github_token != "" ? aws_ecs_service.mcp_server[0].name : null
+}
+
+output "mcp_server_task_name" {
+  description = "Task family name for the MCP server"
+  value       = var.github_token != "" ? aws_ecs_task_definition.mcp_server[0].family : null
+}
+
+output "service_discovery_namespace" {
+  description = "AWS Cloud Map namespace for service discovery"
+  value       = var.github_token != "" ? aws_service_discovery_private_dns_namespace.main[0].name : null
+}
+
+output "mcp_server_dns" {
+  description = "DNS name for the MCP server via service discovery"
+  value       = var.github_token != "" ? "mcp-server.${aws_service_discovery_private_dns_namespace.main[0].name}" : null
+}

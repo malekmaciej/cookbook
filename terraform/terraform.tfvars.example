@@ -1,0 +1,42 @@
+# AWS Configuration
+aws_region = "us-east-1"
+environment = "dev"
+project_name = "cookbook-chatbot"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Chainlit Application Configuration
+container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cookbook-chatbot:latest"
+container_cpu = 1024
+container_memory = 2048
+desired_count = 2
+
+# MCP Server Configuration
+# Set github_token to enable MCP server deployment
+# Leave empty to deploy only the Chainlit app
+github_token = ""  # Set to your GitHub token (e.g., "ghp_xxxxxxxxxxxx")
+mcp_container_image = "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest"
+github_repo = "malekmaciej/przepisy"
+recipes_path = ""
+mcp_container_cpu = 512
+mcp_container_memory = 1024
+mcp_desired_count = 1
+
+# Bedrock Configuration
+bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+knowledge_base_name = "cooking-recipes-kb"
+
+# Cognito Configuration
+# Must be globally unique
+cognito_domain_prefix = "cookbook-chatbot-yourname-12345"
+
+# Optional: Custom Domain Configuration
+# Leave empty to use ALB DNS name
+domain_name = ""
+route53_zone_id = ""
+
+# Optional: Email Domain Restrictions
+# Leave empty to allow all email domains
+allowed_email_domains = []

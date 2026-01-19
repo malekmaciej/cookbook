@@ -805,3 +805,201 @@ resource "aws_ecs_service" "main" {
     Name = "${var.project_name}-service"
   }
 }
+
+# MCP Server Resources
+
+# Secrets Manager for GitHub Token
+resource "aws_secretsmanager_secret" "github_token" {
+  count       = var.github_token != "" ? 1 : 0
+  name        = "${var.project_name}-github-token"
+  description = "GitHub token for MCP server to access recipe repository"
+
+  tags = {
+    Name = "${var.project_name}-github-token"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "github_token" {
+  count         = var.github_token != "" ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.github_token[0].id
+  secret_string = var.github_token
+}
+
+# IAM Policy for ECS task execution to read secrets
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  count = var.github_token != "" ? 1 : 0
+  name  = "${var.project_name}-ecs-task-execution-secrets-policy"
+  role  = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.github_token[0].arn
+      }
+    ]
+  })
+}
+
+# CloudWatch Log Group for MCP Server
+resource "aws_cloudwatch_log_group" "mcp_server" {
+  count             = var.github_token != "" ? 1 : 0
+  name              = "/ecs/${var.project_name}-mcp-server"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-mcp-server-logs"
+  }
+}
+
+# AWS Cloud Map namespace for service discovery
+resource "aws_service_discovery_private_dns_namespace" "main" {
+  count       = var.github_token != "" ? 1 : 0
+  name        = "${var.project_name}.local"
+  description = "Service discovery namespace for ${var.project_name}"
+  vpc         = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-namespace"
+  }
+}
+
+# AWS Cloud Map service for MCP server
+resource "aws_service_discovery_service" "mcp_server" {
+  count = var.github_token != "" ? 1 : 0
+  name  = "mcp-server"
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.main[0].id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+
+  tags = {
+    Name = "${var.project_name}-mcp-server-discovery"
+  }
+}
+
+# Security group rule to allow traffic between ECS tasks
+resource "aws_security_group_rule" "ecs_tasks_internal" {
+  count                    = var.github_token != "" ? 1 : 0
+  type                     = "ingress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.ecs_tasks.id
+  security_group_id        = aws_security_group.ecs_tasks.id
+  description              = "Allow traffic between ECS tasks for MCP server"
+}
+
+# ECS Task Definition for MCP Server
+resource "aws_ecs_task_definition" "mcp_server" {
+  count                    = var.github_token != "" ? 1 : 0
+  family                   = "${var.project_name}-mcp-server-task"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.mcp_container_cpu
+  memory                   = var.mcp_container_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
+  container_definitions = jsonencode([
+    {
+      name  = "mcp-server"
+      image = var.mcp_container_image
+
+      portMappings = [
+        {
+          containerPort = 8000
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "GITHUB_REPO"
+          value = var.github_repo
+        },
+        {
+          name  = "RECIPES_PATH"
+          value = var.recipes_path
+        },
+        {
+          name  = "MCP_HOST"
+          value = "0.0.0.0"
+        },
+        {
+          name  = "MCP_PORT"
+          value = "8000"
+        },
+        {
+          name  = "MCP_PATH"
+          value = "/mcp"
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "GITHUB_TOKEN"
+          valueFrom = aws_secretsmanager_secret.github_token[0].arn
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.mcp_server[0].name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
+      essential = true
+    }
+  ])
+
+  tags = {
+    Name = "${var.project_name}-mcp-server-task"
+  }
+}
+
+# ECS Service for MCP Server
+resource "aws_ecs_service" "mcp_server" {
+  count           = var.github_token != "" ? 1 : 0
+  name            = "${var.project_name}-mcp-server-service"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.mcp_server[0].arn
+  desired_count   = var.mcp_desired_count
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    subnets          = aws_subnet.private[*].id
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.mcp_server[0].arn
+  }
+
+  tags = {
+    Name = "${var.project_name}-mcp-server-service"
+  }
+}
