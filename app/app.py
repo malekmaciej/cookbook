@@ -4,7 +4,7 @@ import boto3
 import httpx
 import re
 import json
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 # Initialize AWS clients
 bedrock_agent_runtime = boto3.client(
@@ -19,70 +19,147 @@ KNOWLEDGE_BASE_ID = os.environ.get("KNOWLEDGE_BASE_ID")
 MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
 
+# Cache for MCP tools
+_mcp_tools_cache = None
 
-def is_add_recipe_request(user_message: str) -> bool:
+
+async def discover_mcp_tools() -> List[Dict[str, Any]]:
     """
-    Determine if the user message is a request to add a new recipe.
-    
-    Args:
-        user_message: The user's message
-        
+    Discover available tools from the MCP server.
+
     Returns:
-        True if the message appears to be requesting to add a recipe
+        List of tools in Bedrock tool specification format
     """
-    add_patterns = [
-        r'\b(add|create|save|store|new)\s+(a\s+)?(recipe|przepis)',
-        r'\b(dodaj|zapisz|nowy)\s+(przepis)',
-        r'(want to|would like to|can I|please)\s+(add|create|save)',
-        r'(save|store)\s+(this|my)\s+recipe',
-    ]
-    
-    message_lower = user_message.lower()
-    for pattern in add_patterns:
-        if re.search(pattern, message_lower):
-            return True
-    return False
+    global _mcp_tools_cache
+
+    # Return cached tools if available
+    if _mcp_tools_cache is not None:
+        return _mcp_tools_cache
+
+    if not MCP_SERVER_URL or MCP_SERVER_URL == "":
+        return []
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Call MCP tools/list method
+            payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+            response = await client.post(
+                MCP_SERVER_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract tools from response
+            tools = result.get("result", {}).get("tools", [])
+
+            # Convert MCP tool format to Bedrock tool specification
+            bedrock_tools = []
+            for tool in tools:
+                bedrock_tool = {
+                    "toolSpec": {
+                        "name": tool.get("name"),
+                        "description": tool.get("description", ""),
+                        "inputSchema": {"json": tool.get("inputSchema", {})},
+                    }
+                }
+                bedrock_tools.append(bedrock_tool)
+
+            # Cache the tools
+            _mcp_tools_cache = bedrock_tools
+            return bedrock_tools
+
+    except Exception as e:
+        cl.logger.error(f"Failed to discover MCP tools: {e}")
+        return []
+
+
+async def call_mcp_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Call an MCP tool.
+
+    Args:
+        tool_name: Name of the tool to call
+        tool_input: Input parameters for the tool
+
+    Returns:
+        Tool execution result
+    """
+    if not MCP_SERVER_URL or MCP_SERVER_URL == "":
+        return {"error": "MCP server is not configured"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": tool_input},
+            }
+
+            response = await client.post(
+                MCP_SERVER_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            return result.get("result", {})
+
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def is_valid_recipe_format(text: str) -> bool:
     """
     Check if the text contains a properly formatted recipe.
     A valid recipe should have a title (starting with #) and required sections.
-    
+
     Args:
         text: The text to validate
-        
+
     Returns:
         True if the text appears to be a properly formatted recipe
     """
     # Check for title
-    if not text.startswith('#'):
+    if not text.startswith("#"):
         return False
-    
+
     # Check for ingredient section (supports both English and Polish)
-    has_ingredients = bool(re.search(r'##\s*(Składniki|Ingredients)', text, re.IGNORECASE))
-    
+    has_ingredients = bool(
+        re.search(r"##\s*(Składniki|Ingredients)", text, re.IGNORECASE)
+    )
+
     # Check for preparation section (supports both English and Polish)
-    has_preparation = bool(re.search(r'##\s*(Sposób przygotowania|Preparation|Instructions|Steps)', text, re.IGNORECASE))
-    
+    has_preparation = bool(
+        re.search(
+            r"##\s*(Sposób przygotowania|Preparation|Instructions|Steps)",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
     return has_ingredients and has_preparation
 
 
 async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
     """
     Create a new recipe using the MCP server's create_recipe tool.
-    
+
     Args:
         recipe_name: Name of the recipe
         recipe_content: Full content of the recipe in Markdown format
-        
+
     Returns:
         Response from the MCP server with 'success' field at top level
     """
     # Check if MCP server is configured
     if not MCP_SERVER_URL or MCP_SERVER_URL == "":
         return {"error": "MCP server is not configured", "success": False}
-    
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             # MCP protocol requires calling tools via JSON-RPC
@@ -92,21 +169,18 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
                 "method": "tools/call",
                 "params": {
                     "name": "create_recipe",
-                    "arguments": {
-                        "name": recipe_name,
-                        "content": recipe_content
-                    }
-                }
+                    "arguments": {"name": recipe_name, "content": recipe_content},
+                },
             }
-            
+
             response = await client.post(
                 MCP_SERVER_URL,
                 json=payload,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
             result = response.json()
-            
+
             # Normalize response format - extract success from nested result if present
             if isinstance(result, dict) and "result" in result:
                 nested_result = result["result"]
@@ -114,9 +188,9 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
                     return {
                         "success": nested_result.get("success", False),
                         "error": nested_result.get("error"),
-                        "path": nested_result.get("path")
+                        "path": nested_result.get("path"),
                     }
-            
+
             return result
     except Exception as e:
         return {"error": str(e), "success": False}
@@ -133,13 +207,13 @@ async def start():
         "- Providing ingredient substitutions\n"
         "- Explaining cooking techniques\n"
     )
-    
+
     # Add recipe creation feature only if MCP server is configured
     if MCP_SERVER_URL and MCP_SERVER_URL != "":
         welcome_message += "- Adding new recipes to the cookbook 📝\n"
-    
+
     welcome_message += "\nWhat would you like to cook today?"
-    
+
     await cl.Message(content=welcome_message).send()
 
 
@@ -153,151 +227,151 @@ async def main(message: cl.Message):
     await msg.send()
 
     try:
-        # Check if this is a request to add a new recipe
-        if is_add_recipe_request(user_message):
-            # Check if MCP server is available
-            if not MCP_SERVER_URL or MCP_SERVER_URL == "":
-                msg.content = "⚠️ I'd love to help you add a recipe, but the recipe creation feature is not currently enabled. Please contact your administrator to enable the MCP server."
-                await msg.update()
-                return
-            
-            # Ask the user to provide recipe details if not already provided
-            # Use Bedrock to extract or guide recipe creation
-            system_prompt = """You are a helpful cooking assistant helping users add recipes to the cookbook.
+        # Discover MCP tools
+        mcp_tools = await discover_mcp_tools()
 
-When a user wants to add a recipe, guide them through the process:
-1. If they haven't provided the recipe yet, ask them to provide the recipe name and full details
-2. If they provide recipe details, format it properly in this structure:
-
-# Recipe Name
-
-## Opis
-Brief description of the dish
-
-**Porcje:** [number of servings]
-**Czas przygotowania:** [preparation time]
-**Temperatura pieczenia:** [temperature if applicable]
-
-## Składniki
-- List all ingredients with measurements
-
-## Sposób przygotowania
-1. Step-by-step instructions
-
-Then indicate you're ready to save it by saying "I'll save this recipe to the cookbook now."
-
-Always ensure recipes are complete with ALL ingredients and ALL preparation steps before saving."""
-
-            # Use Bedrock to help format the recipe or guide the user
-            response = bedrock_agent_runtime.retrieve_and_generate(
-                input={"text": user_message},
-                retrieveAndGenerateConfiguration={
-                    "type": "KNOWLEDGE_BASE",
-                    "knowledgeBaseConfiguration": {
-                        "knowledgeBaseId": KNOWLEDGE_BASE_ID,
-                        "modelArn": MODEL_ID,
-                        "retrievalConfiguration": {
-                            "vectorSearchConfiguration": {"numberOfResults": 3}
-                        },
-                        "generationConfiguration": {
-                            "promptTemplate": {
-                                "textPromptTemplate": f"{system_prompt}\n\nUser request: $query$\n\nExisting recipes for reference: $search_results$\n\nResponse:"
-                            }
-                        },
-                    },
+        # First, retrieve relevant context from Knowledge Base
+        kb_context = ""
+        try:
+            kb_response = bedrock_agent_runtime.retrieve(
+                knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                retrievalQuery={"text": user_message},
+                retrievalConfiguration={
+                    "vectorSearchConfiguration": {"numberOfResults": 5}
                 },
             )
 
-            generated_text = response["output"]["text"]
-            
-            # Check if the response contains a properly formatted recipe
-            # If it does, try to save it to MCP server
-            if is_valid_recipe_format(generated_text):
-                # Extract recipe name from the first line
-                lines = generated_text.split('\n')
-                recipe_name = lines[0].lstrip('#').strip() if lines else "Unnamed Recipe"
-                
-                # Try to save the recipe via MCP
-                result = await create_recipe_via_mcp(recipe_name, generated_text)
-                
-                if result.get("success", False):
-                    msg.content = f"✅ **Recipe Added Successfully!**\n\n{generated_text}\n\n📝 The recipe '{recipe_name}' has been saved to the cookbook and will be available after the next Knowledge Base sync."
-                else:
-                    error_msg = result.get("error", "Unknown error")
-                    msg.content = f"⚠️ I formatted the recipe, but couldn't save it automatically:\n\n{generated_text}\n\n❌ Error: {error_msg}\n\nPlease try again or contact support."
-            else:
-                # Just guide the user
-                msg.content = generated_text
+            # Extract retrieved content
+            retrieved_results = kb_response.get("retrievalResults", [])
+            if retrieved_results:
+                kb_context = "\n\n".join(
+                    [
+                        f"Recipe context {i+1}:\n{result.get('content', {}).get('text', '')}"
+                        for i, result in enumerate(retrieved_results)
+                    ]
+                )
+        except Exception as e:
+            cl.logger.warning(f"Knowledge Base retrieval failed: {e}")
 
-            await msg.update()
-            return
+        # System prompt
+        system_prompt = [
+            {
+                "text": """You are a helpful cooking assistant with access to a cookbook knowledge base and recipe management tools.
 
-        # Normal recipe query flow
-        # System prompt with formatting instructions
-        system_prompt = """You are a helpful cooking assistant. When providing recipes, always format them in a clear, well-structured Markdown format with the following sections:
+Your capabilities:
+1. Search and provide recipes from the cookbook
+2. Answer cooking questions and provide advice
+3. Use available tools to manage recipes (list, search, create, update)
+
+When providing recipes, always format them clearly:
 
 # Recipe Name
 
 ## Opis
-Brief description of the dish
+Brief description
 
-**Porcje:** [number of servings]
-**Czas przygotowania:** [preparation time]
-**Temperatura pieczenia:** [temperature if applicable]
+**Porcje:** [servings]
+**Czas przygotowania:** [time]
 
 ## Składniki
-- List all ingredients with measurements
-- Group by category if applicable (e.g., "Ciasto", "Nadzienie")
+- Ingredient list
 
 ## Sposób przygotowania
 1. Step-by-step instructions
-2. Each step on a new numbered line
-3. Clear and concise directions
 
-Include any tips, variations, or notes at the end if relevant.
-Always provide the COMPLETE recipe with ALL ingredients and ALL steps, never summarize or skip parts."""
+Always provide COMPLETE recipes with ALL ingredients and ALL steps.
 
-        # Query the Knowledge Base using Retrieve and Generate
-        response = bedrock_agent_runtime.retrieve_and_generate(
-            input={"text": user_message},
-            retrieveAndGenerateConfiguration={
-                "type": "KNOWLEDGE_BASE",
-                "knowledgeBaseConfiguration": {
-                    "knowledgeBaseId": KNOWLEDGE_BASE_ID,
-                    "modelArn": MODEL_ID,
-                    "retrievalConfiguration": {
-                        "vectorSearchConfiguration": {"numberOfResults": 5}
-                    },
-                    "generationConfiguration": {
-                        "promptTemplate": {
-                            "textPromptTemplate": f"{system_prompt}\n\nUser question: $query$\n\nSearch results: $search_results$\n\nProvide a complete, well-formatted response:"
-                        }
-                    },
-                },
-            },
-        )
+If you have tools available, use them when appropriate:
+- Use list_recipes or search_recipes to find recipes
+- Use create_recipe to save new recipes the user wants to add
+- Use update_recipe to modify existing recipes"""
+            }
+        ]
 
-        # Extract the generated response
-        generated_text = response["output"]["text"]
+        # Prepare messages
+        messages = [{"role": "user", "content": [{"text": user_message}]}]
 
-        # Get citations if available
-        citations = response.get("citations", [])
+        # Add KB context if available
+        if kb_context:
+            messages[0]["content"].insert(
+                0, {"text": f"Relevant cookbook context:\n{kb_context}\n\n"}
+            )
 
-        # Format the response with citations
-        response_text = generated_text
+        # Prepare tool configuration
+        tool_config = {}
+        if mcp_tools:
+            tool_config = {"tools": mcp_tools}
 
-        if citations:
-            response_text += "\n\n📚 **Sources:**\n"
-            for idx, citation in enumerate(citations, 1):
-                retrieved_references = citation.get("retrievedReferences", [])
-                for ref in retrieved_references:
-                    location = ref.get("location", {})
-                    s3_location = location.get("s3Location", {})
-                    uri = s3_location.get("uri", "Unknown")
-                    response_text += f"{idx}. {uri}\n"
+        # Call Bedrock Converse API with tool use
+        max_iterations = 5
+        iteration = 0
 
-        msg.content = response_text
-        await msg.update()
+        while iteration < max_iterations:
+            iteration += 1
+
+            response = bedrock_runtime.converse(
+                modelId=MODEL_ID,
+                messages=messages,
+                system=system_prompt,
+                toolConfig=tool_config if tool_config else None,
+            )
+
+            # Extract response
+            stop_reason = response.get("stopReason")
+            output_message = response.get("output", {}).get("message", {})
+
+            # Add assistant response to messages
+            messages.append(output_message)
+
+            # Check if tool use is requested
+            if stop_reason == "tool_use":
+                # Process tool calls
+                tool_results = []
+
+                for content_block in output_message.get("content", []):
+                    if "toolUse" in content_block:
+                        tool_use = content_block["toolUse"]
+                        tool_name = tool_use.get("name")
+                        tool_input = tool_use.get("input", {})
+                        tool_use_id = tool_use.get("toolUseId")
+
+                        cl.logger.info(
+                            f"Calling tool: {tool_name} with input: {tool_input}"
+                        )
+
+                        # Call the MCP tool
+                        tool_result = await call_mcp_tool(tool_name, tool_input)
+
+                        # Format tool result
+                        tool_results.append(
+                            {
+                                "toolResult": {
+                                    "toolUseId": tool_use_id,
+                                    "content": [{"json": tool_result}],
+                                }
+                            }
+                        )
+
+                # Add tool results to messages
+                messages.append({"role": "user", "content": tool_results})
+
+                # Continue the loop to get next response
+                continue
+
+            # If stop reason is end_turn or max_tokens, extract final response
+            else:
+                final_text = ""
+                for content_block in output_message.get("content", []):
+                    if "text" in content_block:
+                        final_text += content_block["text"]
+
+                msg.content = final_text
+                await msg.update()
+                break
+
+        if iteration >= max_iterations:
+            msg.content += "\n\n⚠️ Maximum tool iterations reached."
+            await msg.update()
 
     except Exception as e:
         error_message = f"❌ Sorry, I encountered an error: {str(e)}\n\n"
