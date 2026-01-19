@@ -36,13 +36,18 @@ aws ecr get-login-password --region us-east-1 | docker login --username AWS --pa
 # Create ECR repository (if not exists)
 aws ecr create-repository --repository-name recipe-mcp-server --region us-east-1
 
-# Build and tag image
-docker build -t recipe-mcp-server:latest .
+# Build and tag image for ARM64 (required for ECS deployment)
+docker buildx build --platform linux/arm64 -t recipe-mcp-server:latest .
 docker tag recipe-mcp-server:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
+
+# Note: If building on ARM64 Mac or Linux, you can use the regular docker build command:
+# docker build -t recipe-mcp-server:latest .
 
 # Push image
 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
 ```
+
+**Important**: The ECS task definition uses ARM64 architecture for cost efficiency. Ensure your Docker image is built for ARM64.
 
 ## Configuration Variables
 

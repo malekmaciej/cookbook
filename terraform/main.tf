@@ -829,7 +829,7 @@ resource "aws_secretsmanager_secret_version" "github_token" {
 resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
   count = var.github_token != "" ? 1 : 0
   name  = "${var.project_name}-ecs-task-execution-secrets-policy"
-  role  = aws_iam_role.ecs_task_execution.id
+  role  = aws_iam_role.ecs_task_execution.name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -915,6 +915,8 @@ resource "aws_ecs_task_definition" "mcp_server" {
   memory                   = var.mcp_container_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
+  # ARM64 architecture for cost efficiency (same as Chainlit app)
+  # Note: MCP server Docker image must be built for ARM64
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"

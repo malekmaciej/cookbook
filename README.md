@@ -139,8 +139,8 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 # Create ECR repository for MCP server
 aws ecr create-repository --repository-name recipe-mcp-server --region us-east-1
 
-# Build the MCP server image
-docker build -t recipe-mcp-server:latest .
+# Build the MCP server image for ARM64 architecture
+docker buildx build --platform linux/arm64 -t recipe-mcp-server:latest .
 
 # Tag the image
 docker tag recipe-mcp-server:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
@@ -148,6 +148,8 @@ docker tag recipe-mcp-server:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaw
 # Push the image
 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/recipe-mcp-server:latest
 ```
+
+**Note**: Use `docker buildx build --platform linux/arm64` for ARM64 architecture. On ARM64 Mac/Linux, regular `docker build` works.
 
 Update `terraform.tfvars` with the MCP server image URI and your GitHub token:
 ```hcl
