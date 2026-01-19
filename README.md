@@ -2,11 +2,23 @@
 
 An AI-powered cooking assistant chatbot for your recipe collection, built with AWS Bedrock, Knowledge Bases, and Chainlit.
 
-## 🆕 MCP Server
+## 🆕 MCP Server Integration
 
 This repository now includes an **MCP (Model Context Protocol) Server** built with FastMCP 2.0 that provides programmatic access to recipes stored in a GitHub repository. The MCP server exposes tools and resources for listing, searching, getting, creating, and updating recipes via the standardized MCP protocol.
 
 👉 **[See MCP Server Documentation](mcp-server/README.md)** for setup and usage instructions.
+
+### New Feature: Add Recipes via Chatbot 📝
+
+The Chainlit chatbot application now integrates with the MCP server to enable users to **add new recipes directly through the chat interface**. When a user requests to add a recipe (e.g., "Can you add a recipe for chocolate cake?"), the chatbot:
+
+1. Detects the intent to add a recipe
+2. Guides the user through providing recipe details
+3. Formats the recipe in the proper Markdown structure
+4. Saves it to the GitHub repository via the MCP server
+5. Notifies the user that the recipe will be available after the next Knowledge Base sync
+
+**Note**: This feature is only available when the MCP server is deployed and the `MCP_SERVER_URL` environment variable is configured in the Chainlit app.
 
 ## Architecture
 

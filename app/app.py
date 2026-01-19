@@ -34,6 +34,7 @@ def is_add_recipe_request(user_message: str) -> bool:
         r'\b(add|create|save|store|new)\s+(a\s+)?(recipe|przepis)',
         r'\b(dodaj|zapisz|nowy)\s+(przepis)',
         r'(want to|would like to|can I|please)\s+(add|create|save)',
+        r'(save|store)\s+(this|my)\s+recipe',
     ]
     
     message_lower = user_message.lower()
@@ -54,6 +55,10 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
     Returns:
         Response from the MCP server
     """
+    # Check if MCP server is configured
+    if not MCP_SERVER_URL or MCP_SERVER_URL == "":
+        return {"error": "MCP server is not configured", "success": False}
+    
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             # MCP protocol requires calling tools via JSON-RPC
@@ -84,16 +89,22 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
 @cl.on_chat_start
 async def start():
     """Initialize the chat session."""
-    await cl.Message(
-        content="👨‍🍳 Welcome to CookBook Chatbot! I'm your AI cooking assistant powered by AWS Bedrock.\n\n"
+    welcome_message = (
+        "👨‍🍳 Welcome to CookBook Chatbot! I'm your AI cooking assistant powered by AWS Bedrock.\n\n"
         "I can help you with:\n"
         "- Finding recipes from the cookbook\n"
         "- Answering cooking questions\n"
         "- Providing ingredient substitutions\n"
         "- Explaining cooking techniques\n"
-        "- Adding new recipes to the cookbook 📝\n\n"
-        "What would you like to cook today?"
-    ).send()
+    )
+    
+    # Add recipe creation feature only if MCP server is configured
+    if MCP_SERVER_URL and MCP_SERVER_URL != "":
+        welcome_message += "- Adding new recipes to the cookbook 📝\n"
+    
+    welcome_message += "\nWhat would you like to cook today?"
+    
+    await cl.Message(content=welcome_message).send()
 
 
 @cl.on_message
@@ -108,6 +119,12 @@ async def main(message: cl.Message):
     try:
         # Check if this is a request to add a new recipe
         if is_add_recipe_request(user_message):
+            # Check if MCP server is available
+            if not MCP_SERVER_URL or MCP_SERVER_URL == "":
+                msg.content = "⚠️ I'd love to help you add a recipe, but the recipe creation feature is not currently enabled. Please contact your administrator to enable the MCP server."
+                await msg.update()
+                return
+            
             # Ask the user to provide recipe details if not already provided
             # Use Bedrock to extract or guide recipe creation
             system_prompt = """You are a helpful cooking assistant helping users add recipes to the cookbook.
