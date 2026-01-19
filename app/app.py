@@ -17,7 +17,7 @@ bedrock_runtime = boto3.client(
 
 KNOWLEDGE_BASE_ID = os.environ.get("KNOWLEDGE_BASE_ID")
 MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp-server.cookbook-chatbot.local:8000/mcp")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
 
 
 def is_add_recipe_request(user_message: str) -> bool:
@@ -44,6 +44,30 @@ def is_add_recipe_request(user_message: str) -> bool:
     return False
 
 
+def is_valid_recipe_format(text: str) -> bool:
+    """
+    Check if the text contains a properly formatted recipe.
+    A valid recipe should have a title (starting with #) and required sections.
+    
+    Args:
+        text: The text to validate
+        
+    Returns:
+        True if the text appears to be a properly formatted recipe
+    """
+    # Check for title
+    if not text.startswith('#'):
+        return False
+    
+    # Check for ingredient section (supports both English and Polish)
+    has_ingredients = bool(re.search(r'##\s*(Składniki|Ingredients)', text, re.IGNORECASE))
+    
+    # Check for preparation section (supports both English and Polish)
+    has_preparation = bool(re.search(r'##\s*(Sposób przygotowania|Preparation|Instructions|Steps)', text, re.IGNORECASE))
+    
+    return has_ingredients and has_preparation
+
+
 async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
     """
     Create a new recipe using the MCP server's create_recipe tool.
@@ -53,7 +77,7 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
         recipe_content: Full content of the recipe in Markdown format
         
     Returns:
-        Response from the MCP server
+        Response from the MCP server with 'success' field at top level
     """
     # Check if MCP server is configured
     if not MCP_SERVER_URL or MCP_SERVER_URL == "":
@@ -81,7 +105,19 @@ async def create_recipe_via_mcp(recipe_name: str, recipe_content: str) -> dict:
                 headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Normalize response format - extract success from nested result if present
+            if isinstance(result, dict) and "result" in result:
+                nested_result = result["result"]
+                if isinstance(nested_result, dict):
+                    return {
+                        "success": nested_result.get("success", False),
+                        "error": nested_result.get("error"),
+                        "path": nested_result.get("path")
+                    }
+            
+            return result
     except Exception as e:
         return {"error": str(e), "success": False}
 
@@ -176,7 +212,7 @@ Always ensure recipes are complete with ALL ingredients and ALL preparation step
             
             # Check if the response contains a properly formatted recipe
             # If it does, try to save it to MCP server
-            if "# " in generated_text and "## Składniki" in generated_text and "## Sposób przygotowania" in generated_text:
+            if is_valid_recipe_format(generated_text):
                 # Extract recipe name from the first line
                 lines = generated_text.split('\n')
                 recipe_name = lines[0].lstrip('#').strip() if lines else "Unnamed Recipe"
@@ -184,7 +220,7 @@ Always ensure recipes are complete with ALL ingredients and ALL preparation step
                 # Try to save the recipe via MCP
                 result = await create_recipe_via_mcp(recipe_name, generated_text)
                 
-                if result.get("success", False) or (isinstance(result, dict) and result.get("result", {}).get("success", False)):
+                if result.get("success", False):
                     msg.content = f"✅ **Recipe Added Successfully!**\n\n{generated_text}\n\n📝 The recipe '{recipe_name}' has been saved to the cookbook and will be available after the next Knowledge Base sync."
                 else:
                     error_msg = result.get("error", "Unknown error")
