@@ -220,3 +220,11 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Backup files
+backup-*
+*-backup.*
+
+# Local testing
+static-site/config-local.js
+terraform-static/
