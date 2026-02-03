@@ -1,0 +1,21 @@
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "dev"
+
+# Project Configuration
+project_name = "cookbook-chatbot"
+
+# Cognito Configuration
+# IMPORTANT: This must be globally unique across all AWS accounts
+cognito_domain_prefix = "cookbook-chatbot-yourname-12345"
+
+# Bedrock Configuration
+knowledge_base_name = "cooking-recipes-kb"
+
+# MCP Server Configuration (Optional)
+# Leave mcp_server_url empty if not using MCP server
+# If you have an MCP server deployed elsewhere, provide its URL here
+mcp_server_url = ""
+
+# Example: If MCP server is deployed on EC2 or elsewhere
+# mcp_server_url = "http://your-mcp-server.example.com:8000/mcp"

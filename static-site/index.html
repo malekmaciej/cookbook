@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CookBook Chatbot 👨‍🍳</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍳 CookBook Chatbot</h1>
+            <p class="subtitle">Your AI Cooking Assistant</p>
+            <div id="auth-section">
+                <button id="logout-btn" class="btn btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <div id="chat-container">
+            <div id="messages"></div>
+        </div>
+
+        <div id="input-container">
+            <textarea 
+                id="user-input" 
+                placeholder="Ask me about recipes, cooking tips, or ingredients..."
+                rows="2"
+            ></textarea>
+            <button id="send-btn" class="btn btn-primary">Send</button>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to CookBook Chatbot! 👨‍🍳</h2>
+            <p>Please sign in to continue</p>
+            <button id="login-btn" class="btn btn-primary">Sign In with AWS Cognito</button>
+        </div>
+    </div>
+
+    <!-- AWS SDK -->
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+    <!-- Amazon Cognito Identity SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.3.7/dist/amazon-cognito-identity.min.js"></script>
+    <!-- Application Script -->
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

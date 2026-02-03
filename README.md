@@ -1,6 +1,26 @@
 # CookBook Chatbot 👨‍🍳
 
-An AI-powered cooking assistant chatbot for your recipe collection, built with AWS Bedrock, Knowledge Bases, and Chainlit.
+An AI-powered cooking assistant chatbot for your recipe collection, built with AWS Bedrock and Knowledge Bases.
+
+## 🎉 NEW: Cost-Optimized Static Website Option
+
+**Save 90%+ on infrastructure costs!** This repository now includes a static website implementation that can be hosted on **S3 + CloudFront** instead of expensive ECS + ALB infrastructure.
+
+- **Old cost**: ~$80-120/month (ECS + ALB + NAT Gateway)
+- **New cost**: ~$1.50-7/month (S3 + CloudFront)
+- **Savings**: ~$75-115/month!
+
+👉 **[See Static Website Deployment Guide](STATIC_DEPLOYMENT.md)** for the cost-optimized option.
+
+The static website provides the same chatbot functionality using HTML/JavaScript with AWS SDK, eliminating the need for:
+- ❌ ECS Fargate containers
+- ❌ Application Load Balancer
+- ❌ VPC and NAT Gateway
+- ❌ Chainlit framework
+
+Choose the deployment option that best fits your needs:
+- **Static Website** (recommended): Low cost, simple architecture, same functionality
+- **ECS + Chainlit** (legacy): Higher cost, Python-based, requires Docker
 
 ## 🆕 MCP Server Integration
 
@@ -21,6 +41,38 @@ The Chainlit chatbot application now integrates with the MCP server to enable us
 **Note**: This feature is only available when the MCP server is deployed and the `MCP_SERVER_URL` environment variable is configured in the Chainlit app.
 
 ## Architecture
+
+### 🌟 Static Website Architecture (Recommended - Low Cost)
+
+**Cost**: ~$1.50-7/month + Bedrock usage
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   Internet  │────▶│  CloudFront  │────▶│   S3 Bucket     │
+│   Users     │     │   (HTTPS)    │     │  (Static Site)  │
+└─────────────┘     └──────┬───────┘     └─────────────────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │   Cognito    │
+                    │   (Auth)     │
+                    └──────┬───────┘
+                           │
+        ┌──────────────────┼─────────────────┐
+        │                  │                 │
+        ▼                  ▼                 ▼
+┌─────────────┐    ┌──────────────┐  ┌─────────────┐
+│  Bedrock    │    │      S3      │  │ OpenSearch  │
+│  Runtime    │    │  (Recipes)   │  │ Serverless  │
+│  (Browser)  │    └──────────────┘  │  (Vectors)  │
+└─────────────┘                      └─────────────┘
+```
+
+👉 **[See Static Website Deployment Guide](STATIC_DEPLOYMENT.md)** for setup instructions.
+
+### Legacy ECS Architecture
+
+**Cost**: ~$80-120/month + Bedrock usage
 
 This project implements a serverless, scalable chatbot solution with the following AWS services:
 
@@ -49,7 +101,9 @@ This project implements a serverless, scalable chatbot solution with the followi
                     └──────────┘                    └──────────────┘
 ```
 
-### Components
+### Components (Legacy ECS Architecture)
+
+**Note**: These components are only required for the legacy ECS deployment. The static website architecture requires only: CloudFront, S3, Cognito, Bedrock, and OpenSearch Serverless.
 
 - **Application Load Balancer (ALB)**: Entry point for HTTPS traffic with SSL termination
 - **AWS Cognito**: User authentication and authorization with AWS SSO integration
@@ -67,6 +121,12 @@ This project implements a serverless, scalable chatbot solution with the followi
 
 ## Prerequisites
 
+### For Static Website Deployment (Recommended)
+- AWS Account with appropriate permissions
+- AWS CLI configured with credentials
+- Terraform >= 1.5
+
+### For Legacy ECS Deployment
 - AWS Account with appropriate permissions
 - AWS CLI configured with credentials
 - Terraform >= 1.5
@@ -74,6 +134,18 @@ This project implements a serverless, scalable chatbot solution with the followi
 - Python 3.11+
 
 ## Quick Start
+
+### 🌟 Static Website Deployment (Recommended)
+
+For the cost-optimized static website deployment on S3 + CloudFront:
+
+👉 **Follow the [Static Website Deployment Guide](STATIC_DEPLOYMENT.md)**
+
+This provides the same chatbot functionality at 90%+ lower cost.
+
+### Legacy ECS + Chainlit Deployment
+
+For the original ECS + ALB deployment (higher cost), follow these steps:
 
 ### 1. Clone the Repository
 
@@ -254,6 +326,23 @@ See `terraform/variables.tf` for all configurable options:
 
 ## Cost Estimation
 
+### 🌟 Static Website Architecture (Recommended)
+
+Approximate monthly costs (us-east-1):
+
+**Infrastructure:**
+- **S3 Hosting**: ~$0.50-2 (minimal storage and requests)
+- **CloudFront**: ~$1-5 (includes 1TB free tier for first 12 months)
+- **OpenSearch Serverless**: ~$0-10 (depending on vector storage and queries)
+- **Cognito**: Free tier (50,000 MAUs)
+- **Bedrock**: Pay per request (varies with usage)
+
+**Total**: ~$1.50-17/month base cost + Bedrock usage
+
+**Savings vs. ECS**: ~$75-115/month (90%+ reduction)
+
+### Legacy ECS Architecture
+
 Approximate monthly costs (us-east-1):
 
 **Base Infrastructure:**
@@ -272,6 +361,16 @@ Approximate monthly costs (us-east-1):
 
 ## Security Features
 
+### Static Website Architecture
+- ✅ All traffic over HTTPS via CloudFront
+- ✅ AWS Cognito authentication required
+- ✅ Bedrock access via IAM (Cognito Identity Pool)
+- ✅ S3 bucket not publicly accessible (CloudFront OAI only)
+- ✅ S3 bucket encryption enabled
+- ✅ IAM roles with least privilege
+- ✅ No secrets or credentials in client-side code
+
+### Legacy ECS Architecture
 - ✅ VPC with public/private subnet isolation
 - ✅ ECS tasks run in private subnets
 - ✅ AWS Cognito authentication required
