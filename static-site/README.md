@@ -35,6 +35,7 @@ This is a static HTML/JavaScript implementation of the CookBook Chatbot that can
 - ✅ Markdown formatting support
 - ✅ Real-time chat interface
 - ✅ Tool use support (for MCP integration)
+- ✅ Polish language recipe format (matching original cookbook)
 
 ## Files
 

@@ -357,6 +357,7 @@ I can help you with:
             }
 
             // Prepare system prompt
+            // Note: Recipe format uses Polish language as this is a Polish cookbook
             const systemPrompt = [{
                 text: `You are a helpful cooking assistant with access to a cookbook knowledge base and recipe management tools.
 
